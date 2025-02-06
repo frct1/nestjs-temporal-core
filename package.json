@@ -1,7 +1,17 @@
 {
   "name": "nestjs-temporal-core",
-  "version": "1.0.1-beta.1",
+  "version": "1.0.1-beta.2",
   "description": "NestJS integration for Temporal.io with worker and client support",
+  "author": "Harsh M",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/harsh-simform/nestjs-temporal-core.git"
+  },
+  "bugs": {
+    "url": "https://github.com/harsh-simform/nestjs-temporal-core/issues"
+  },
+  "homepage": "https://github.com/harsh-simform/nestjs-temporal-core#readme",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
@@ -12,11 +22,11 @@
   "scripts": {
     "build": "rimraf dist && tsc -p tsconfig.json",
     "format": "prettier --write \"src/**/*.ts\"",
-    "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
+    "lint": "eslint \"src/**/*.ts\" --fix",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
-    "prepare": "husky install",
+    "prepare": "husky",
     "prepublishOnly": "npm run build && npm run lint",
     "preversion": "npm run lint",
     "version": "npm run format && git add -A src",
@@ -29,32 +39,48 @@
     "publish:beta": "npm version prerelease --preid=beta --no-git-tag-version && npm publish --tag beta",
     "publish:alpha": "npm version prerelease --preid=alpha --no-git-tag-version && npm publish --tag alpha"
   },
+  "keywords": [
+    "nestjs",
+    "temporal",
+    "workflow",
+    "microservices"
+  ],
+  "dependencies": {
+    "@nestjs/config": "^3.3.0",
+    "@nestjs/platform-express": "^10.0.0"
+  },
   "peerDependencies": {
-    "@nestjs/common": "^8.0.0",
-    "@nestjs/core": "^8.0.0",
+    "@nestjs/common": "^9.0.0",
+    "@nestjs/core": "^9.0.0",
     "@temporalio/client": "^1.8.0",
     "@temporalio/worker": "^1.8.0",
+    "@temporalio/workflow": "^1.8.0",
     "reflect-metadata": "^0.1.13",
     "rxjs": "^7.0.0"
   },
   "devDependencies": {
-    "@nestjs/common": "^8.0.0",
-    "@nestjs/core": "^8.0.0",
-    "@nestjs/testing": "^8.0.0",
+    "@nestjs/common": "^9.0.0",
+    "@nestjs/core": "^9.0.0",
+    "@nestjs/testing": "^9.0.0",
     "@temporalio/client": "^1.8.0",
     "@temporalio/worker": "^1.8.0",
-    "@types/jest": "^27.0.0",
-    "@types/node": "^16.0.0",
-    "@typescript-eslint/eslint-plugin": "^5.0.0",
-    "@typescript-eslint/parser": "^5.0.0",
-    "eslint": "^8.0.0",
-    "eslint-config-prettier": "^8.3.0",
-    "eslint-plugin-prettier": "^4.0.0",
-    "husky": "^7.0.0",
-    "jest": "^27.0.0",
-    "prettier": "^2.3.2",
-    "rimraf": "^3.0.2",
-    "ts-jest": "^27.0.0",
-    "typescript": "^4.3.5"
+    "@temporalio/workflow": "^1.8.0",
+    "@types/jest": "^29.5.0",
+    "@types/node": "^18.15.11",
+    "@typescript-eslint/eslint-plugin": "^5.57.1",
+    "@typescript-eslint/parser": "^5.57.1",
+    "eslint": "^8.37.0",
+    "eslint-config-prettier": "^8.8.0",
+    "eslint-plugin-prettier": "^4.2.1",
+    "husky": "^9.1.7",
+    "jest": "^29.5.0",
+    "prettier": "^2.8.7",
+    "reflect-metadata": "^0.1.13",
+    "rxjs": "^7.8.0",
+    "ts-jest": "^29.1.0",
+    "typescript": "^5.1.6"
+  },
+  "engines": {
+    "node": ">=16.0.0"
   }
 }

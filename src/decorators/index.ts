@@ -1,5 +1,4 @@
-import { Inject } from '@nestjs/common';
-import { TEMPORAL_CLIENT, TEMPORAL_WORKER } from '../constants';
-
-export const InjectTemporalClient = () => Inject(TEMPORAL_CLIENT);
-export const InjectTemporalWorker = () => Inject(TEMPORAL_WORKER);
+export * from './activity.decorator';
+export * from './activity-method.decorator';
+export * from './workflow.decorator';
+export * from './inject-temporal-client.decorator';
