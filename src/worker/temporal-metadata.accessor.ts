@@ -1,5 +1,9 @@
 import { Injectable } from '@nestjs/common';
-import { TEMPORAL_ACTIVITY, TEMPORAL_ACTIVITY_METHOD } from './constants';
+import {
+  TEMPORAL_ACTIVITY,
+  TEMPORAL_ACTIVITY_METHOD,
+  TEMPORAL_ACTIVITY_METHOD_NAME,
+} from '../constants';
 
 @Injectable()
 export class TemporalMetadataAccessor {
@@ -21,6 +25,6 @@ export class TemporalMetadataAccessor {
     if (!target) {
       return undefined;
     }
-    return Reflect.getMetadata('activityMethodName', target);
+    return Reflect.getMetadata(TEMPORAL_ACTIVITY_METHOD_NAME, target);
   }
 }

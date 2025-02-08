@@ -1,6 +1,6 @@
 import { SetMetadata } from '@nestjs/common';
-import { TEMPORAL_WORKFLOW } from '../constants';
 import { WorkflowOptions } from '@temporalio/client';
+import { TEMPORAL_WORKFLOW } from '../constants';
 
 export function Workflow(
   options: WorkflowOptions = { workflowId: '', taskQueue: '' },

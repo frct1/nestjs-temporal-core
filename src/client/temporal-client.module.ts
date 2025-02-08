@@ -11,8 +11,8 @@ import {
   TemporalClientOptions,
   TemporalClientAsyncOptions,
   TemporalClientOptionsFactory,
-} from './interfaces';
-import { TEMPORAL_CLIENT, TEMPORAL_MODULE_OPTIONS } from './constants';
+} from '../interfaces';
+import { TEMPORAL_CLIENT, TEMPORAL_MODULE_OPTIONS } from '../constants';
 import { TemporalClientService } from './temporal-client.service';
 
 @Global()
@@ -21,31 +21,24 @@ export class TemporalClientModule {
   private static readonly logger = new Logger(TemporalClientModule.name);
 
   private static async createClient(options: TemporalClientOptions): Promise<Client> {
-    this.logger.log('Initializing Temporal client', {
-      address: options.connection.address,
-      namespace: options.namespace || 'default',
-    });
-
+    let connection: Connection | null = null;
     try {
-      const connection = await Connection.connect({
+      connection = await Connection.connect({
         address: options.connection.address,
         tls: options.connection.tls,
       });
 
-      const client = new Client({
+      return new Client({
         connection,
         namespace: options.namespace || 'default',
       });
-
-      this.logger.log('Temporal client initialized successfully');
-      return client;
     } catch (error) {
-      this.logger.error('Failed to initialize Temporal client', {
-        error: error.message,
-        stack: error.stack,
-        address: options.connection.address,
-      });
-      throw error;
+      if (connection) {
+        await connection.close().catch(() => {
+          // Intentionally ignore close errors during initialization
+        });
+      }
+      throw new Error(`Temporal client initialization failed: ${error.message}`);
     }
   }
 
@@ -53,8 +46,14 @@ export class TemporalClientModule {
     const clientProvider = {
       provide: TEMPORAL_CLIENT,
       useFactory: async () => {
-        const client = await this.createClient(options);
-        return this.addShutdownHook(client);
+        try {
+          const client = await this.createClient(options);
+          return this.addShutdownHook(client);
+        } catch (error) {
+          this.logger.error('Failed to initialize Temporal client', { error: error.message });
+          // Allow server to start even if Temporal client fails
+          return null;
+        }
       },
     };
 
@@ -76,8 +75,14 @@ export class TemporalClientModule {
     const clientProvider = {
       provide: TEMPORAL_CLIENT,
       useFactory: async (clientOptions: TemporalClientOptions) => {
-        const client = await this.createClient(clientOptions);
-        return this.addShutdownHook(client);
+        try {
+          const client = await this.createClient(clientOptions);
+          return this.addShutdownHook(client);
+        } catch (error) {
+          this.logger.error('Failed to initialize Temporal client', { error: error.message });
+          // Allow server to start even if Temporal client fails
+          return null;
+        }
       },
       inject: [TEMPORAL_MODULE_OPTIONS],
     };
@@ -127,22 +132,15 @@ export class TemporalClientModule {
       ];
     }
 
-    const error = new Error('Invalid TemporalClientAsyncOptions configuration');
-    this.logger.error(error.message);
-    throw error;
+    throw new Error('Invalid TemporalClientAsyncOptions configuration');
   }
 
   private static addShutdownHook(client: Client): Client & OnApplicationShutdown {
     const enhancedClient = client as Client & OnApplicationShutdown;
     enhancedClient.onApplicationShutdown = async () => {
-      try {
-        this.logger.log('Closing Temporal client connection');
-        await client.connection?.close();
-        this.logger.log('Temporal client connection closed successfully');
-      } catch (error) {
-        this.logger.error('Failed to close Temporal client connection', {
-          error: error.message,
-          stack: error.stack,
+      if (client?.connection) {
+        await client.connection.close().catch((error) => {
+          this.logger.error('Failed to close Temporal connection', { error: error.message });
         });
       }
     };

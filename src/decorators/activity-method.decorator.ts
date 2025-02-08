@@ -1,5 +1,5 @@
 import { SetMetadata } from '@nestjs/common';
-import { TEMPORAL_ACTIVITY_METHOD } from '../constants';
+import { TEMPORAL_ACTIVITY_METHOD, TEMPORAL_ACTIVITY_METHOD_NAME } from '../constants';
 
 export interface ActivityMethodOptions {
   name?: string;
@@ -11,7 +11,7 @@ export function ActivityMethod(options: ActivityMethodOptions = {}): MethodDecor
 
     // Store the method name if provided in options, otherwise use the property key
     const methodName = options.name || propertyKey.toString();
-    Reflect.defineMetadata('activityMethodName', methodName, descriptor.value);
+    Reflect.defineMetadata(TEMPORAL_ACTIVITY_METHOD_NAME, methodName, descriptor.value);
 
     return descriptor;
   };

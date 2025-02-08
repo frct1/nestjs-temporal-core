@@ -23,7 +23,23 @@ npm install nestjs-temporal-core @temporalio/client @temporalio/worker @temporal
 
 ## Quick Start
 
-### 1. Register the Module
+### 1. Enable Shutdown Hooks
+
+First, make sure to enable shutdown hooks in your `main.ts` file. This is **required** to ensure proper cleanup of Temporal workers and avoid port blocking issues:
+
+```typescript
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule);
+  
+  // Enable shutdown hooks - IMPORTANT: Add this line to handle graceful shutdowns
+  app.enableShutdownHooks();
+  
+  await app.listen(3000);
+}
+bootstrap();
+```
+
+### 2. Register the Module
 
 ```typescript
 import { Module } from '@nestjs/common';
@@ -51,7 +67,7 @@ import { TemporalWorkerModule, TemporalClientModule } from 'nestjs-temporal-core
 export class AppModule {}
 ```
 
-### 2. Define Activities
+### 3. Define Activities
 
 ```typescript
 import { Activity, ActivityMethod } from 'nestjs-temporal-core';
@@ -66,7 +82,7 @@ export class PaymentActivity {
 }
 ```
 
-### 3. Define Workflows
+### 4. Define Workflows
 
 ```typescript
 import { proxyActivities } from '@temporalio/workflow';
@@ -81,7 +97,7 @@ export async function paymentWorkflow(amount: number): Promise<string> {
 }
 ```
 
-### 4. Use the Client Service
+### 5. Use the Client Service
 
 ```typescript
 import { Injectable } from '@nestjs/common';

@@ -11,6 +11,7 @@ export interface TemporalWorkerOptions {
   workflowsPath: string;
   activityClasses?: Array<new (...args: any[]) => any>;
   runtimeOptions?: RuntimeOptions;
+  workerOptions?: WorkerOptions;
 }
 
 export interface TemporalWorkerOptionsFactory {
