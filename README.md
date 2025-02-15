@@ -10,10 +10,10 @@ A NestJS integration for [Temporal.io](https://temporal.io/) that provides seaml
 - 🔌 Built-in connection management
 - 🛡️ Type-safe workflow execution
 - 📡 Simplified client operations
-
-## Example Repository
-
-Check out our [example repository](https://github.com/harsh-simform/nestjs-temporal-core-example) to see a complete working implementation.
+- 🔒 TLS support for secure connections
+- 🎛️ Configurable runtime options
+- 🔄 Enhanced worker options customization
+- 📊 Worker status monitoring
 
 ## Installation
 
@@ -25,15 +25,12 @@ npm install nestjs-temporal-core @temporalio/client @temporalio/worker @temporal
 
 ### 1. Enable Shutdown Hooks
 
-First, make sure to enable shutdown hooks in your `main.ts` file. This is **required** to ensure proper cleanup of Temporal workers and avoid port blocking issues:
+First, make sure to enable shutdown hooks in your `main.ts` file:
 
 ```typescript
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  
-  // Enable shutdown hooks - IMPORTANT: Add this line to handle graceful shutdowns
   app.enableShutdownHooks();
-  
   await app.listen(3000);
 }
 bootstrap();
@@ -55,6 +52,14 @@ import { TemporalWorkerModule, TemporalClientModule } from 'nestjs-temporal-core
       taskQueue: 'my-task-queue',
       workflowsPath: require.resolve('./workflows'),
       activityClasses: [MyActivity],
+      // New: Optional runtime configuration
+      runtimeOptions: {
+        // Add your runtime options here
+      },
+      // New: Optional worker configuration
+      workerOptions: {
+        // Add your worker options here
+      },
     }),
     TemporalClientModule.register({
       connection: {
@@ -108,7 +113,7 @@ export class PaymentService {
   constructor(private readonly temporalClient: TemporalClientService) {}
 
   async initiatePayment(amount: number) {
-    const { result } = await this.temporalClient.startWorkflow<string, [number]>(
+    const { result, handle } = await this.temporalClient.startWorkflow<string, [number]>(
       'paymentWorkflow',
       [amount],
       {
@@ -135,6 +140,12 @@ TemporalWorkerModule.registerAsync({
     taskQueue: configService.get('TEMPORAL_TASK_QUEUE'),
     workflowsPath: require.resolve('./workflows'),
     activityClasses: [MyActivity],
+    runtimeOptions: {
+      // Add runtime options
+    },
+    workerOptions: {
+      // Add worker options
+    },
   }),
   inject: [ConfigService],
 });
@@ -162,9 +173,8 @@ TemporalClientModule.register({
 ### Decorators
 
 - `@Activity()`: Marks a class as a Temporal activity
-- `@ActivityMethod()`: Marks a method as a Temporal activity implementation
-- `@Workflow()`: Marks a class as a Temporal workflow
-- `@InjectTemporalClient()`: Injects the Temporal client instance
+- `@ActivityMethod(name?: string)`: Marks a method as a Temporal activity implementation with optional custom name
+- `@Workflow(options?: WorkflowOptions)`: Marks a class as a Temporal workflow with optional configuration
 
 ### Services
 
@@ -174,6 +184,14 @@ TemporalClientModule.register({
 - `signalWorkflow()`: Send a signal to a running workflow
 - `terminateWorkflow()`: Terminate a running workflow
 - `getWorkflowHandle()`: Get a handle to manage a workflow
+- `getWorkflowClient()`: Get the underlying workflow client instance
+
+#### WorkerManager
+
+- `getStatus()`: Get the current status of the worker including:
+  - isRunning: boolean
+  - taskQueue: string
+  - namespace: string
 
 ### Module Options
 
@@ -187,6 +205,7 @@ interface TemporalWorkerOptions {
   workflowsPath: string;
   activityClasses?: Array<new (...args: any[]) => any>;
   runtimeOptions?: RuntimeOptions;
+  workerOptions?: WorkerOptions;
 }
 ```
 
@@ -201,16 +220,12 @@ interface TemporalClientOptions {
 
 ## Error Handling
 
-The module provides built-in error handling and logging. Worker and client errors are logged using NestJS's built-in logger.
+The module includes comprehensive error handling:
 
-## Health Checks
-
-The WorkerManager provides a `getStatus()` method to check the worker's health:
-
-```typescript
-const status = await workerManager.getStatus();
-// Returns: { isRunning: boolean; isInitializing: boolean; error: Error | null }
-```
+- Worker initialization errors are logged and can prevent application startup if critical
+- Client operations include detailed error messages and proper error propagation
+- Activity and workflow errors are properly captured and logged
+- Connection errors are handled gracefully with automatic cleanup
 
 ## Best Practices
 
@@ -219,6 +234,9 @@ const status = await workerManager.getStatus();
 3. Implement proper error handling in activities
 4. Set appropriate timeouts for activities and workflows
 5. Use signals for long-running workflow coordination
+6. Monitor worker status using the WorkerManager service
+7. Configure appropriate runtime and worker options for production deployments
+8. Implement proper TLS security for production environments
 
 ## Contributing
 

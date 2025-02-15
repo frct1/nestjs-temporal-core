@@ -7,21 +7,30 @@ import {
 
 @Injectable()
 export class TemporalMetadataAccessor {
-  isActivity(target: any): boolean {
+  /**
+   * Check if target is marked as a Temporal Activity
+   */
+  isActivity(target: Function): boolean {
     if (!target) {
       return false;
     }
     return !!Reflect.getMetadata(TEMPORAL_ACTIVITY, target);
   }
 
-  isActivityMethod(target: any): boolean {
+  /**
+   * Check if target is marked as a Temporal Activity Method
+   */
+  isActivityMethod(target: Function): boolean {
     if (!target) {
       return false;
     }
     return !!Reflect.getMetadata(TEMPORAL_ACTIVITY_METHOD, target);
   }
 
-  getActivityMethodName(target: any): string | undefined {
+  /**
+   * Get the name of the Activity Method
+   */
+  getActivityMethodName(target: Function): string | undefined {
     if (!target) {
       return undefined;
     }

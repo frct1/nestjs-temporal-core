@@ -1,16 +1,13 @@
 import { SetMetadata } from '@nestjs/common';
 import { TEMPORAL_ACTIVITY } from '../constants';
 
-export interface ActivityOptions {
-  name?: string;
-}
-
-export function Activity(options: ActivityOptions = {}): ClassDecorator {
+/**
+ * Decorator that marks a class as a Temporal Activity
+ */
+export const Activity = (): ClassDecorator => {
   return (target: any) => {
+    Reflect.defineMetadata(TEMPORAL_ACTIVITY, true, target);
     SetMetadata(TEMPORAL_ACTIVITY, true)(target);
-    if (options.name) {
-      Reflect.defineMetadata('activityName', options.name, target);
-    }
     return target;
   };
-}
+};

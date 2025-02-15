@@ -1,218 +1,129 @@
-import { Injectable, OnModuleInit, Inject, Type, Logger } from '@nestjs/common';
-import { NativeConnection, Worker, Runtime } from '@temporalio/worker';
-import { ModulesContainer } from '@nestjs/core';
-import { InstanceWrapper } from '@nestjs/core/injector/instance-wrapper';
+import {
+  Inject,
+  Injectable,
+  Logger,
+  OnApplicationBootstrap,
+  OnModuleDestroy,
+  OnModuleInit,
+} from '@nestjs/common';
+import { DiscoveryService } from '@nestjs/core';
+import { NativeConnection, Runtime, Worker } from '@temporalio/worker';
+import { TEMPORAL_WORKER_MODULE_OPTIONS } from '../constants';
 import { TemporalWorkerOptions } from '../interfaces';
-import { TEMPORAL_MODULE_OPTIONS } from '../constants';
+import { TemporalMetadataAccessor } from './temporal-metadata.accessor';
 
 @Injectable()
-export class WorkerManager implements OnModuleInit {
-  private worker: Worker | null = null;
-  private connection: NativeConnection | null = null;
+export class WorkerManager implements OnModuleInit, OnModuleDestroy, OnApplicationBootstrap {
   private readonly logger = new Logger(WorkerManager.name);
-  private isRunning = false;
-  private isInitializing = false;
-  private initializationError: Error | null = null;
-  private shutdownPromise: Promise<void> | null = null;
-  private workerRunPromise: Promise<void> | null = null;
-  private isShuttingDown = false;
+  private worker: Worker;
+  private timerId: NodeJS.Timeout | null = null;
 
   constructor(
-    @Inject(TEMPORAL_MODULE_OPTIONS)
+    @Inject(TEMPORAL_WORKER_MODULE_OPTIONS)
     private readonly options: TemporalWorkerOptions,
-    private readonly modulesContainer: ModulesContainer,
-  ) {
-    this.registerProcessShutdownHandlers();
+    private readonly discoveryService: DiscoveryService,
+    private readonly metadataAccessor: TemporalMetadataAccessor,
+  ) {}
+
+  async onModuleInit() {
+    await this.explore();
   }
 
-  private registerProcessShutdownHandlers(): void {
-    ['SIGTERM', 'SIGINT'].forEach((signal) => {
-      process.once(signal, async () => {
-        this.logger.log(`Received ${signal} signal. Starting worker shutdown...`);
-        await this.shutdown();
-      });
-    });
-
-    // Handle process exit
-    process.once('beforeExit', async () => {
-      await this.shutdown();
-    });
-  }
-
-  async onModuleInit(): Promise<void> {
-    try {
-      await this.initializeWorker();
-    } catch (error) {
-      this.logger.error('Worker initialization failed', { error: error.message });
-      this.initializationError = error;
+  onModuleDestroy() {
+    if (this.worker) {
+      this.worker.shutdown();
     }
+    this.clearInterval();
   }
 
-  private async shutdown(): Promise<void> {
-    if (this.shutdownPromise || this.isShuttingDown) {
-      return this.shutdownPromise || Promise.resolve();
-    }
-
-    this.isShuttingDown = true;
-    this.shutdownPromise = this.doShutdown();
-
-    try {
-      await this.shutdownPromise;
-    } finally {
-      this.isShuttingDown = false;
-      this.shutdownPromise = null;
-    }
-  }
-
-  private async doShutdown(): Promise<void> {
-    this.logger.log('Starting worker shutdown sequence');
-    this.isRunning = false;
-
-    try {
+  onApplicationBootstrap() {
+    this.timerId = setInterval(() => {
       if (this.worker) {
-        this.logger.log('Shutting down worker...');
-        await this.worker.shutdown();
-        // Wait a brief moment to ensure worker has released connection
-        await new Promise((resolve) => setTimeout(resolve, 100));
-        this.worker = null;
+        this.worker.run().catch((error) => {
+          this.logger.error('Error running worker', error);
+        });
+        this.clearInterval();
+      }
+    }, 1000);
+  }
+
+  private clearInterval() {
+    if (this.timerId) {
+      clearInterval(this.timerId);
+      this.timerId = null;
+    }
+  }
+
+  private async explore() {
+    try {
+      if (!this.options.taskQueue) {
+        this.logger.warn('No taskQueue configured, skipping worker initialization');
+        return;
       }
 
-      // Only close connection after worker is fully shut down
-      if (this.connection) {
-        this.logger.log('Closing connection...');
-        try {
-          await this.connection.close();
-        } catch (error) {
-          // If connection is already closed or in process of closing, log and continue
-          this.logger.warn('Connection close warning', { error: error.message });
-        }
-        this.connection = null;
+      const activities = await this.handleActivities();
+
+      if (this.options.runtimeOptions) {
+        Runtime.install(this.options.runtimeOptions);
       }
 
-      this.logger.log('Shutdown sequence completed');
+      const connection = await NativeConnection.connect(this.options.connection);
+
+      this.worker = await Worker.create({
+        connection,
+        namespace: this.options.namespace,
+        taskQueue: this.options.taskQueue,
+        workflowsPath: this.options.workflowsPath,
+        activities,
+        ...this.options.workerOptions,
+      });
+
+      this.logger.log(`Worker created for queue: ${this.options.taskQueue}`);
     } catch (error) {
-      this.logger.error('Shutdown error', { error: error.message });
-      // Even in case of error, null out references
-      this.worker = null;
-      this.connection = null;
+      this.logger.error('Failed to initialize worker', error);
       throw error;
     }
   }
 
-  private findProviderByType<T>(type: Type<T>): InstanceWrapper | undefined {
-    for (const [, module] of this.modulesContainer.entries()) {
-      const provider = module.providers.get(type);
-      if (provider) return provider;
-    }
-    return undefined;
-  }
-
-  private async handleActivities(): Promise<Record<string, (...args: any[]) => any>> {
+  private async handleActivities() {
     const activities: Record<string, (...args: any[]) => any> = {};
+    const providers = this.discoveryService.getProviders();
 
-    if (!this.options.activityClasses?.length) {
-      return activities;
-    }
+    const activityProviders = providers.filter((wrapper) => {
+      const { instance, metatype } = wrapper;
+      const targetClass = instance?.constructor || metatype;
+      return (
+        targetClass &&
+        this.options.activityClasses?.includes(targetClass) &&
+        this.metadataAccessor.isActivity(targetClass)
+      );
+    });
 
-    for (const activityClass of this.options.activityClasses) {
-      try {
-        const provider = this.findProviderByType(activityClass);
-        const instance = provider?.instance || new activityClass();
+    for (const wrapper of activityProviders) {
+      const { instance } = wrapper;
+      if (!instance) continue;
 
-        if (!instance) {
-          this.logger.warn(`Activity instance not found for class: ${activityClass.name}`);
-          continue;
+      const prototype = Object.getPrototypeOf(instance);
+      const methods = Object.getOwnPropertyNames(prototype).filter(
+        (prop) => prop !== 'constructor',
+      );
+
+      for (const methodName of methods) {
+        const method = prototype[methodName];
+        if (this.metadataAccessor.isActivityMethod(method)) {
+          const activityName = this.metadataAccessor.getActivityMethodName(method) || methodName;
+          activities[activityName] = method.bind(instance);
+          this.logger.debug(`Registered activity method: ${activityName}`);
         }
-
-        const prototype = Object.getPrototypeOf(instance);
-        const methodNames = Object.getOwnPropertyNames(prototype).filter(
-          (methodName) =>
-            methodName !== 'constructor' && typeof instance[methodName] === 'function',
-        );
-
-        for (const methodName of methodNames) {
-          activities[methodName] = instance[methodName].bind(instance);
-        }
-
-        this.logger.log(`Registered activities for ${activityClass.name}`);
-      } catch (error) {
-        this.logger.error(`Failed to register activities for ${activityClass.name}`, {
-          error: error.message,
-        });
       }
     }
 
     return activities;
   }
 
-  private async initializeWorker(): Promise<void> {
-    if (this.isRunning || this.isInitializing || this.isShuttingDown) {
-      return;
-    }
-
-    this.isInitializing = true;
-    let tempConnection: NativeConnection | null = null;
-
-    try {
-      if (this.options.runtimeOptions) {
-        Runtime.install(this.options.runtimeOptions);
-      }
-
-      tempConnection = await NativeConnection.connect({
-        address: this.options.connection.address,
-        tls: this.options.connection.tls,
-      });
-
-      const activities = await this.handleActivities();
-
-      const worker = await Worker.create({
-        connection: tempConnection,
-        namespace: this.options.namespace,
-        taskQueue: this.options.taskQueue,
-        workflowsPath: this.options.workflowsPath,
-        activities,
-        shutdownGraceTime: '10 seconds',
-        ...(this.options.workerOptions || {}),
-      });
-
-      this.workerRunPromise = worker.run().catch((error) => {
-        this.logger.error('Worker runtime error', { error: error.message });
-        this.initializationError = error;
-        this.isRunning = false;
-      });
-
-      this.connection = tempConnection;
-      this.worker = worker;
-      this.isRunning = true;
-
-      this.logger.log('Worker initialized successfully');
-    } catch (error) {
-      if (tempConnection) {
-        await tempConnection.close().catch((closeError) => {
-          this.logger.error('Error closing temporary connection during initialization failure', {
-            error: closeError.message,
-          });
-        });
-      }
-      throw error;
-    } finally {
-      this.isInitializing = false;
-    }
-  }
-
-  async getStatus(): Promise<{
-    isRunning: boolean;
-    isInitializing: boolean;
-    isShuttingDown: boolean;
-    error: Error | null;
-    taskQueue?: string;
-    namespace?: string;
-  }> {
+  async getStatus() {
     return {
-      isRunning: this.isRunning,
-      isInitializing: this.isInitializing,
-      isShuttingDown: this.isShuttingDown,
-      error: this.initializationError,
+      isRunning: !!this.worker,
       taskQueue: this.options.taskQueue,
       namespace: this.options.namespace,
     };
