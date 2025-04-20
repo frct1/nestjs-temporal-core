@@ -1,149 +1,215 @@
 import {
-  DynamicModule,
-  Global,
-  Module,
-  Provider,
-  OnApplicationShutdown,
-  Logger,
+    DynamicModule,
+    Global,
+    Module,
+    Provider,
+    OnApplicationShutdown,
+    Logger,
 } from '@nestjs/common';
 import { Client, Connection } from '@temporalio/client';
 import {
-  TemporalClientOptions,
-  TemporalClientAsyncOptions,
-  TemporalClientOptionsFactory,
+    TemporalClientOptions,
+    TemporalClientAsyncOptions,
+    TemporalClientOptionsFactory,
 } from '../interfaces';
-import { TEMPORAL_CLIENT, TEMPORAL_MODULE_OPTIONS } from '../constants';
+import { TEMPORAL_CLIENT, TEMPORAL_MODULE_OPTIONS, DEFAULT_NAMESPACE, ERRORS } from '../constants';
 import { TemporalClientService } from './temporal-client.service';
 
+/**
+ * Global module for Temporal client configuration
+ * Provides a configured Temporal client throughout the application
+ */
 @Global()
 @Module({})
 export class TemporalClientModule {
-  private static readonly logger = new Logger(TemporalClientModule.name);
+    private static readonly logger = new Logger(TemporalClientModule.name);
 
-  private static async createClient(options: TemporalClientOptions): Promise<Client> {
-    let connection: Connection | null = null;
-    try {
-      connection = await Connection.connect({
-        address: options.connection.address,
-        tls: options.connection.tls,
-      });
-
-      return new Client({
-        connection,
-        namespace: options.namespace || 'default',
-      });
-    } catch (error) {
-      if (connection) {
-        await connection.close().catch(() => {
-          // Intentionally ignore close errors during initialization
-        });
-      }
-      throw new Error(`Temporal client initialization failed: ${error.message}`);
-    }
-  }
-
-  static register(options: TemporalClientOptions): DynamicModule {
-    const clientProvider = {
-      provide: TEMPORAL_CLIENT,
-      useFactory: async () => {
+    /**
+     * Creates a Temporal client instance
+     * @param options Client configuration options
+     * @returns Configured Temporal client
+     */
+    private static async createClient(options: TemporalClientOptions): Promise<Client> {
+        let connection: Connection | null = null;
         try {
-          const client = await this.createClient(options);
-          return this.addShutdownHook(client);
+            this.logger.log(`Connecting to Temporal server at ${options.connection.address}`);
+
+            connection = await Connection.connect({
+                address: options.connection.address,
+                tls: options.connection.tls,
+                ...(options.connection.connectionTimeout && {
+                    connectionTimeout: options.connection.connectionTimeout,
+                }),
+            });
+
+            const namespace = options.namespace || DEFAULT_NAMESPACE;
+            this.logger.log(`Connected to Temporal server, using namespace "${namespace}"`);
+
+            return new Client({
+                connection,
+                namespace,
+            });
         } catch (error) {
-          this.logger.error('Failed to initialize Temporal client', { error: error.message });
-          // Allow server to start even if Temporal client fails
-          return null;
+            if (connection) {
+                await connection.close().catch((closeError) => {
+                    this.logger.error(
+                        'Failed to close Temporal connection during error handling',
+                        closeError,
+                    );
+                });
+            }
+
+            const errorMsg = `${ERRORS.CLIENT_INITIALIZATION}: ${error.message}`;
+            this.logger.error(errorMsg, error.stack);
+            throw new Error(errorMsg);
         }
-      },
-    };
+    }
 
-    return {
-      module: TemporalClientModule,
-      providers: [
-        {
-          provide: TEMPORAL_MODULE_OPTIONS,
-          useValue: options,
-        },
-        clientProvider,
-        TemporalClientService,
-      ],
-      exports: [TemporalClientService],
-    };
-  }
+    /**
+     * Synchronously register Temporal client module with options
+     * @param options Client configuration
+     * @returns Configured dynamic module
+     */
+    static register(options: TemporalClientOptions): DynamicModule {
+        const clientProvider = {
+            provide: TEMPORAL_CLIENT,
+            useFactory: async () => {
+                try {
+                    const client = await this.createClient(options);
+                    return this.addShutdownHook(client);
+                } catch (error) {
+                    this.logger.error('Failed to initialize Temporal client', error);
 
-  static registerAsync(options: TemporalClientAsyncOptions): DynamicModule {
-    const clientProvider = {
-      provide: TEMPORAL_CLIENT,
-      useFactory: async (clientOptions: TemporalClientOptions) => {
-        try {
-          const client = await this.createClient(clientOptions);
-          return this.addShutdownHook(client);
-        } catch (error) {
-          this.logger.error('Failed to initialize Temporal client', { error: error.message });
-          // Allow server to start even if Temporal client fails
-          return null;
+                    // Allow server to start even if Temporal client fails
+                    if (options.allowConnectionFailure !== false) {
+                        this.logger.warn('Continuing application startup without Temporal client');
+                        return null;
+                    }
+
+                    throw error;
+                }
+            },
+        };
+
+        return {
+            module: TemporalClientModule,
+            providers: [
+                {
+                    provide: TEMPORAL_MODULE_OPTIONS,
+                    useValue: options,
+                },
+                clientProvider,
+                TemporalClientService,
+            ],
+            exports: [TemporalClientService],
+        };
+    }
+
+    /**
+     * Asynchronously register Temporal client module with factory
+     * @param options Async client configuration
+     * @returns Configured dynamic module
+     */
+    static registerAsync(options: TemporalClientAsyncOptions): DynamicModule {
+        const clientProvider = {
+            provide: TEMPORAL_CLIENT,
+            useFactory: async (clientOptions: TemporalClientOptions) => {
+                try {
+                    const client = await this.createClient(clientOptions);
+                    return this.addShutdownHook(client);
+                } catch (error) {
+                    this.logger.error('Failed to initialize Temporal client', error);
+
+                    // Allow server to start even if Temporal client fails
+                    if (clientOptions.allowConnectionFailure !== false) {
+                        this.logger.warn('Continuing application startup without Temporal client');
+                        return null;
+                    }
+
+                    throw error;
+                }
+            },
+            inject: [TEMPORAL_MODULE_OPTIONS],
+        };
+
+        return {
+            module: TemporalClientModule,
+            imports: options.imports || [],
+            providers: [
+                ...this.createAsyncProviders(options),
+                clientProvider,
+                TemporalClientService,
+            ],
+            exports: [TemporalClientService],
+        };
+    }
+
+    /**
+     * Creates providers for async module configuration
+     * @param options Async options
+     * @returns Array of providers
+     */
+    private static createAsyncProviders(options: TemporalClientAsyncOptions): Provider[] {
+        if (options.useFactory) {
+            return [
+                {
+                    provide: TEMPORAL_MODULE_OPTIONS,
+                    useFactory: options.useFactory,
+                    inject: options.inject || [],
+                },
+            ];
         }
-      },
-      inject: [TEMPORAL_MODULE_OPTIONS],
-    };
 
-    return {
-      module: TemporalClientModule,
-      imports: options.imports || [],
-      providers: [...this.createAsyncProviders(options), clientProvider, TemporalClientService],
-      exports: [TemporalClientService],
-    };
-  }
+        if (options.useClass) {
+            return [
+                {
+                    provide: TEMPORAL_MODULE_OPTIONS,
+                    useFactory: async (optionsFactory: TemporalClientOptionsFactory) =>
+                        await optionsFactory.createClientOptions(),
+                    inject: [options.useClass],
+                },
+                {
+                    provide: options.useClass,
+                    useClass: options.useClass,
+                },
+            ];
+        }
 
-  private static createAsyncProviders(options: TemporalClientAsyncOptions): Provider[] {
-    if (options.useFactory) {
-      return [
-        {
-          provide: TEMPORAL_MODULE_OPTIONS,
-          useFactory: options.useFactory,
-          inject: options.inject || [],
-        },
-      ];
+        if (options.useExisting) {
+            return [
+                {
+                    provide: TEMPORAL_MODULE_OPTIONS,
+                    useFactory: async (optionsFactory: TemporalClientOptionsFactory) =>
+                        await optionsFactory.createClientOptions(),
+                    inject: [options.useExisting],
+                },
+            ];
+        }
+
+        throw new Error(ERRORS.INVALID_OPTIONS);
     }
 
-    if (options.useClass) {
-      return [
-        {
-          provide: TEMPORAL_MODULE_OPTIONS,
-          useFactory: async (optionsFactory: TemporalClientOptionsFactory) =>
-            await optionsFactory.createClientOptions(),
-          inject: [options.useClass],
-        },
-        {
-          provide: options.useClass,
-          useClass: options.useClass,
-        },
-      ];
+    /**
+     * Adds application shutdown hook to client
+     * @param client Temporal client
+     * @returns Enhanced client with shutdown hook
+     */
+    private static addShutdownHook(client: Client): Client & OnApplicationShutdown {
+        const enhancedClient = client as Client & OnApplicationShutdown;
+
+        enhancedClient.onApplicationShutdown = async (signal?: string) => {
+            this.logger.log(`Closing Temporal client connection (signal: ${signal || 'unknown'})`);
+
+            if (client?.connection) {
+                try {
+                    await client.connection.close();
+                    this.logger.log('Temporal connection closed successfully');
+                } catch (error) {
+                    this.logger.error('Failed to close Temporal connection', error);
+                }
+            }
+        };
+
+        return enhancedClient;
     }
-
-    if (options.useExisting) {
-      return [
-        {
-          provide: TEMPORAL_MODULE_OPTIONS,
-          useFactory: async (optionsFactory: TemporalClientOptionsFactory) =>
-            await optionsFactory.createClientOptions(),
-          inject: [options.useExisting],
-        },
-      ];
-    }
-
-    throw new Error('Invalid TemporalClientAsyncOptions configuration');
-  }
-
-  private static addShutdownHook(client: Client): Client & OnApplicationShutdown {
-    const enhancedClient = client as Client & OnApplicationShutdown;
-    enhancedClient.onApplicationShutdown = async () => {
-      if (client?.connection) {
-        await client.connection.close().catch((error) => {
-          this.logger.error('Failed to close Temporal connection', { error: error.message });
-        });
-      }
-    };
-    return enhancedClient;
-  }
 }
