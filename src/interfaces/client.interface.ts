@@ -1,12 +1,10 @@
+/**
+ * Interfaces for the Temporal Client module
+ */
 import { ModuleMetadata, Type } from '@nestjs/common';
+import { RetryPolicy, WorkflowIdReusePolicy, WorkflowIdConflictPolicy } from '@temporalio/client';
+import { Duration, SearchAttributes } from '@temporalio/common';
 import { ConnectionOptions } from './base.interface';
-import { RetryPolicy } from '@temporalio/client';
-import {
-    Duration,
-    SearchAttributes,
-    WorkflowIdConflictPolicy,
-    WorkflowIdReusePolicy,
-} from '@temporalio/common';
 
 /**
  * Client module configuration options
@@ -101,6 +99,10 @@ export interface TemporalClientAsyncOptions extends Pick<ModuleMetadata, 'import
     inject?: any[];
 }
 
+/**
+ * Options for starting a workflow
+ * Uses Temporal's native types where applicable
+ */
 export interface StartWorkflowOptions {
     /**
      * Task queue to use for this workflow

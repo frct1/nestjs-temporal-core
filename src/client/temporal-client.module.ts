@@ -12,7 +12,12 @@ import {
     TemporalClientAsyncOptions,
     TemporalClientOptionsFactory,
 } from '../interfaces';
-import { TEMPORAL_CLIENT, TEMPORAL_MODULE_OPTIONS, DEFAULT_NAMESPACE, ERRORS } from '../constants';
+import {
+    TEMPORAL_CLIENT,
+    TEMPORAL_CLIENT_MODULE_OPTIONS,
+    DEFAULT_NAMESPACE,
+    ERRORS,
+} from '../constants';
 import { TemporalClientService } from './temporal-client.service';
 
 /**
@@ -95,7 +100,7 @@ export class TemporalClientModule {
             module: TemporalClientModule,
             providers: [
                 {
-                    provide: TEMPORAL_MODULE_OPTIONS,
+                    provide: TEMPORAL_CLIENT_MODULE_OPTIONS,
                     useValue: options,
                 },
                 clientProvider,
@@ -129,7 +134,7 @@ export class TemporalClientModule {
                     throw error;
                 }
             },
-            inject: [TEMPORAL_MODULE_OPTIONS],
+            inject: [TEMPORAL_CLIENT_MODULE_OPTIONS],
         };
 
         return {
@@ -153,7 +158,7 @@ export class TemporalClientModule {
         if (options.useFactory) {
             return [
                 {
-                    provide: TEMPORAL_MODULE_OPTIONS,
+                    provide: TEMPORAL_CLIENT_MODULE_OPTIONS,
                     useFactory: options.useFactory,
                     inject: options.inject || [],
                 },
@@ -163,7 +168,7 @@ export class TemporalClientModule {
         if (options.useClass) {
             return [
                 {
-                    provide: TEMPORAL_MODULE_OPTIONS,
+                    provide: TEMPORAL_CLIENT_MODULE_OPTIONS,
                     useFactory: async (optionsFactory: TemporalClientOptionsFactory) =>
                         await optionsFactory.createClientOptions(),
                     inject: [options.useClass],
@@ -178,7 +183,7 @@ export class TemporalClientModule {
         if (options.useExisting) {
             return [
                 {
-                    provide: TEMPORAL_MODULE_OPTIONS,
+                    provide: TEMPORAL_CLIENT_MODULE_OPTIONS,
                     useFactory: async (optionsFactory: TemporalClientOptionsFactory) =>
                         await optionsFactory.createClientOptions(),
                     inject: [options.useExisting],

@@ -1,9 +1,8 @@
+/**
+ * Interfaces for the Temporal Worker module
+ */
 import { ModuleMetadata, Type } from '@nestjs/common';
-import {
-    NativeConnectionOptions,
-    RuntimeOptions,
-    WorkerOptions as TemporalSdkWorkerOptions,
-} from '@temporalio/worker';
+import { NativeConnectionOptions, RuntimeOptions } from '@temporalio/worker';
 
 /**
  * Worker module configuration options
@@ -18,7 +17,7 @@ export interface TemporalWorkerOptions {
      * Temporal namespace
      * @default "default"
      */
-    namespace: string;
+    namespace?: string;
 
     /**
      * Task queue to poll for workflow and activity tasks
@@ -36,7 +35,7 @@ export interface TemporalWorkerOptions {
      * Array of activity classes to register with the worker
      * These classes should be decorated with @Activity()
      */
-    activityClasses?: Array<new (...args: any[]) => any>;
+    activityClasses?: Array<Type<any>>;
 
     /**
      * Runtime options for the worker
@@ -45,8 +44,12 @@ export interface TemporalWorkerOptions {
 
     /**
      * Additional worker options
+     * These will be passed directly to Temporal's Worker.create()
      */
-    workerOptions?: TemporalSdkWorkerOptions;
+    workerOptions?: Omit<
+        TemporalWorkerOptions,
+        'taskQueue' | 'workflowsPath' | 'activities' | 'connection' | 'namespace'
+    >;
 
     /**
      * Auto-start configuration

@@ -11,8 +11,10 @@
 export const TEMPORAL_MODULE_OPTIONS = 'TEMPORAL_MODULE_OPTIONS';
 export const TEMPORAL_CLIENT_MODULE_OPTIONS = 'TEMPORAL_CLIENT_MODULE_OPTIONS';
 export const TEMPORAL_WORKER_MODULE_OPTIONS = 'TEMPORAL_WORKER_MODULE_OPTIONS';
+export const TEMPORAL_SCHEDULE_MODULE_OPTIONS = 'TEMPORAL_SCHEDULE_MODULE_OPTIONS';
 export const TEMPORAL_CLIENT = 'TEMPORAL_CLIENT';
 export const TEMPORAL_CONNECTION = 'TEMPORAL_CONNECTION';
+export const TEMPORAL_SCHEDULE_CLIENT = 'TEMPORAL_SCHEDULE_CLIENT';
 
 // ==========================================
 // Activity-related metadata keys
@@ -21,7 +23,6 @@ export const TEMPORAL_ACTIVITY = 'TEMPORAL_ACTIVITY';
 export const TEMPORAL_ACTIVITY_METHOD = 'TEMPORAL_ACTIVITY_METHOD';
 export const TEMPORAL_ACTIVITY_METHOD_NAME = 'TEMPORAL_ACTIVITY_METHOD_NAME';
 export const TEMPORAL_ACTIVITY_METHOD_OPTIONS = 'TEMPORAL_ACTIVITY_METHOD_OPTIONS';
-export const TEMPORAL_ACTIVITY_OPTIONS = 'TEMPORAL_ACTIVITY_OPTIONS';
 
 // ==========================================
 // Workflow-related metadata keys
@@ -48,18 +49,7 @@ export const TEMPORAL_QUERY_NAME = 'TEMPORAL_QUERY_NAME';
 // ==========================================
 export const DEFAULT_NAMESPACE = 'default';
 export const DEFAULT_TASK_QUEUE = 'default-task-queue';
-export const DEFAULT_ACTIVITY_RETRY_ATTEMPTS = 3;
 export const DEFAULT_CONNECTION_TIMEOUT_MS = 5000;
-export const DEFAULT_WORKFLOW_ID_REUSE_POLICY = 'WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE';
-export const DEFAULT_WORKFLOW_ID_CONFLICT_POLICY = 'WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE';
-
-// ==========================================
-// Worker configuration
-// ==========================================
-export const DEFAULT_WORKER_SHUTDOWN_GRACE_PERIOD_MS = 5000;
-export const DEFAULT_MAX_CONCURRENT_ACTIVITIES = 100;
-export const DEFAULT_MAX_CONCURRENT_WORKFLOW_TASKS = 100;
-export const DEFAULT_WORKER_MONITORING_INTERVAL_MS = 60000; // 1 minute
 
 // ==========================================
 // Error messages

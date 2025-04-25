@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Client, WorkflowClient, WorkflowHandle } from '@temporalio/client';
-import { TEMPORAL_CLIENT } from '../constants';
-import { StartWorkflowOptions } from 'src/interfaces';
+import { TEMPORAL_CLIENT, ERRORS } from '../constants';
+import { StartWorkflowOptions } from '../interfaces';
 
 @Injectable()
 export class TemporalClientService implements OnModuleInit {
@@ -25,13 +25,21 @@ export class TemporalClientService implements OnModuleInit {
         }
     }
 
+    /**
+     * Get the Temporal workflow client instance
+     * @returns Workflow client or null if not initialized
+     */
     getWorkflowClient(): WorkflowClient | null {
         return this.workflowClient;
     }
 
+    /**
+     * Ensure client is initialized before performing operations
+     * @private
+     */
     private ensureClientInitialized() {
         if (!this.workflowClient) {
-            throw new Error('Temporal client not initialized');
+            throw new Error(ERRORS.CLIENT_NOT_INITIALIZED);
         }
     }
 
@@ -41,6 +49,7 @@ export class TemporalClientService implements OnModuleInit {
      * @param workflowType Type of workflow to start
      * @param args Arguments to pass to the workflow
      * @param options Workflow configuration options
+     * @returns Object containing workflow result promise, ID, and handle
      */
     async startWorkflow<T, A extends any[]>(
         workflowType: string,
@@ -104,6 +113,30 @@ export class TemporalClientService implements OnModuleInit {
     }
 
     /**
+     * Query a workflow's state
+     *
+     * @param workflowId ID of the workflow to query
+     * @param queryName Name of the query to execute
+     * @param args Arguments to pass to the query
+     * @returns Query result
+     */
+    async queryWorkflow<T>(workflowId: string, queryName: string, args: any[] = []): Promise<T> {
+        this.ensureClientInitialized();
+
+        try {
+            const handle = await this.workflowClient!.getHandle(workflowId);
+            return await handle.query(queryName, ...args);
+        } catch (error) {
+            this.logger.error(
+                `Failed to query '${queryName}' on workflow ${workflowId}: ${error.message}`,
+            );
+            throw new Error(
+                `Failed to query '${queryName}' on workflow ${workflowId}: ${error.message}`,
+            );
+        }
+    }
+
+    /**
      * Terminate a running workflow
      *
      * @param workflowId ID of the workflow to terminate
@@ -122,10 +155,28 @@ export class TemporalClientService implements OnModuleInit {
     }
 
     /**
+     * Cancel a running workflow
+     *
+     * @param workflowId ID of the workflow to cancel
+     */
+    async cancelWorkflow(workflowId: string): Promise<void> {
+        this.ensureClientInitialized();
+
+        try {
+            const handle = await this.workflowClient!.getHandle(workflowId);
+            await handle.cancel();
+        } catch (error) {
+            this.logger.error(`Failed to cancel workflow ${workflowId}: ${error.message}`);
+            throw new Error(`Failed to cancel workflow ${workflowId}: ${error.message}`);
+        }
+    }
+
+    /**
      * Get a workflow handle for a running workflow
      *
      * @param workflowId ID of the workflow
      * @param runId Specific run ID (optional)
+     * @returns Workflow handle
      */
     async getWorkflowHandle(workflowId: string, runId?: string): Promise<WorkflowHandle> {
         this.ensureClientInitialized();
@@ -135,6 +186,25 @@ export class TemporalClientService implements OnModuleInit {
         } catch (error) {
             this.logger.error(`Failed to get workflow handle for ${workflowId}: ${error.message}`);
             throw new Error(`Failed to get workflow handle for ${workflowId}: ${error.message}`);
+        }
+    }
+
+    /**
+     * Describe a workflow execution
+     *
+     * @param workflowId ID of the workflow
+     * @param runId Specific run ID (optional)
+     * @returns Workflow execution description
+     */
+    async describeWorkflow(workflowId: string, runId?: string) {
+        this.ensureClientInitialized();
+
+        try {
+            const handle = await this.workflowClient!.getHandle(workflowId, runId);
+            return await handle.describe();
+        } catch (error) {
+            this.logger.error(`Failed to describe workflow ${workflowId}: ${error.message}`);
+            throw new Error(`Failed to describe workflow ${workflowId}: ${error.message}`);
         }
     }
 }
