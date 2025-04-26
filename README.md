@@ -10,13 +10,15 @@ NestJS Temporal Core simplifies building fault-tolerant, long-running processes 
 
 - 🚀 **Easy NestJS Integration** - Register modules with sync/async configuration
 - 🔄 **Complete Lifecycle Management** - Automatic worker initialization and graceful shutdown
-- 🎯 **Declarative Decorators** - Type-safe `@Activity()`, `@Workflow()`, `@Signal()`, and `@Query()` decorators
+- 🎯 **Declarative Decorators** - Type-safe `@Activity()`, `@Workflow()`, `@Signal()`, `@Query()`, and `@Update()` decorators
 - 🔌 **Connection Management** - Built-in connection handling with TLS support
 - 🔒 **Type Safety** - Strongly typed interfaces for all Temporal concepts
-- 📡 **Client Operation Utilities** - Methods for starting, signaling, querying and managing workflows
+- 📡 **Client Operation Utilities** - Methods for starting, signaling, querying, updating and managing workflows
 - 📊 **Monitoring Support** - Worker status tracking and metrics
 - 📅 **Scheduling** - Native support for cron and interval-based workflow scheduling
 - 🔍 **Queries and Signals** - First-class support for Temporal's query and signal patterns
+- 🆕 **Updates** - Support for Temporal's workflow update functionality
+- 🔢 **Versioning** - Support for Temporal worker versioning
 - 🚦 **Advanced Policies** - Built-in retry, timeout, and workflow management policies
 
 ## Installation
@@ -165,18 +167,18 @@ export class PaymentService {
 
 ## Advanced Features
 
-### Class-Based Workflows with Queries and Signals
+### Class-Based Workflows with Queries, Signals, and Updates
 
 ```typescript
-import { Workflow, WorkflowMethod, Query, Signal } from 'nestjs-temporal-core';
+import { Workflow, WorkflowMethod, Query, Signal, Update } from 'nestjs-temporal-core';
 
 @Workflow({
     taskQueue: 'order-queue',
-    workflowIdPrefix: 'order-',
     workflowExecutionTimeout: '24h',
 })
 export class OrderWorkflow {
     private orderStatus: string = 'PENDING';
+    private orderItems: string[] = [];
     private cancelReason: string | null = null;
 
     @WorkflowMethod()
@@ -194,6 +196,18 @@ export class OrderWorkflow {
     cancel(reason: string): void {
         this.orderStatus = 'CANCELLED';
         this.cancelReason = reason;
+    }
+
+    @Update({
+        validator: (items: string[]) => {
+            if (items.length === 0) {
+                throw new Error('Order must contain at least one item');
+            }
+        },
+    })
+    updateItems(items: string[]): string[] {
+        this.orderItems = items;
+        return this.orderItems;
     }
 }
 ```
@@ -214,6 +228,22 @@ export class DailyReportWorkflow {
     @WorkflowMethod()
     async execute(): Promise<void> {
         // Generate and send reports
+    }
+}
+
+@ScheduledWorkflow({
+    taskQueue: 'scheduled-tasks',
+    schedule: {
+        interval: {
+            hours: 1, // Run every hour
+        },
+    },
+    description: 'Hourly data processing',
+})
+export class HourlyProcessingWorkflow {
+    @WorkflowMethod()
+    async execute(): Promise<void> {
+        // Process data hourly
     }
 }
 ```
@@ -259,6 +289,33 @@ export class ReportingService {
 
     async listAllSchedules() {
         return await this.scheduleService.listSchedules();
+    }
+}
+```
+
+### Using Workflow Updates
+
+```typescript
+import { Injectable } from '@nestjs/common';
+import { TemporalClientService } from 'nestjs-temporal-core';
+
+@Injectable()
+export class OrderService {
+    constructor(private readonly temporalClient: TemporalClientService) {}
+
+    async updateOrderItems(orderId: string, items: string[]) {
+        try {
+            // Use the updateWorkflow method to modify a running workflow
+            const updatedItems = await this.temporalClient.updateWorkflow<string[]>(
+                `order-${orderId}`,
+                'updateItems',
+                [items],
+            );
+
+            return { success: true, items: updatedItems };
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
     }
 }
 ```
@@ -315,6 +372,35 @@ TemporalClientModule.register({
 });
 ```
 
+### Worker Versioning
+
+Enable worker versioning for compatibility management:
+
+```typescript
+TemporalWorkerModule.register({
+    // ... other options
+    useVersioning: true,
+    buildId: 'v1.2.3-20230615', // Unique identifier for this worker's code version
+});
+```
+
+### Worker Performance Tuning
+
+Optimize worker performance with advanced options:
+
+```typescript
+TemporalWorkerModule.register({
+    // ... other options
+    reuseV8Context: true, // Significantly improves performance and reduces memory usage
+    maxConcurrentWorkflowTaskExecutions: 40,
+    maxConcurrentActivityTaskExecutions: 100,
+    maxConcurrentLocalActivityExecutions: 100,
+    workflowThreadPoolSize: 4,
+    maxActivitiesPerSecond: 50,
+    maxCachedWorkflows: 200,
+});
+```
+
 ### Worker Monitoring
 
 Enable worker monitoring and metrics:
@@ -340,7 +426,7 @@ TemporalWorkerModule.register({
 ### Core Modules
 
 - `TemporalClientModule` - Client connectivity for workflow operations
-- `TemporalWorkerModule` - Worker process for running activities
+- `TemporalWorkerModule` - Worker process for running activities and workflows
 - `TemporalScheduleModule` - Scheduling for recurring workflows
 
 ### Decorators
@@ -351,6 +437,7 @@ TemporalWorkerModule.register({
 - `@WorkflowMethod(options?)` - Marks the primary workflow execution method
 - `@Query(options?)` - Marks a method as a query handler
 - `@Signal(options?)` - Marks a method as a signal handler
+- `@Update(options?)` - Marks a method as an update handler
 - `@ScheduledWorkflow(options)` - Defines a workflow with schedule configuration
 
 ### Services
@@ -360,23 +447,26 @@ TemporalWorkerModule.register({
 - `startWorkflow<T, A>()` - Start a new workflow execution
 - `signalWorkflow()` - Send a signal to a running workflow
 - `queryWorkflow<T>()` - Query a running workflow
+- `updateWorkflow<T>()` - Update a running workflow
 - `terminateWorkflow()` - Terminate a running workflow
 - `cancelWorkflow()` - Request cancellation of a workflow
 - `getWorkflowHandle()` - Get a handle to manage a workflow
 - `describeWorkflow()` - Get workflow execution details
+- `listWorkflows()` - List workflows matching a query
+- `countWorkflows()` - Count workflows matching a query
 - `getWorkflowClient()` - Get the underlying workflow client
+- `getRawClient()` - Get the raw Temporal client
 
 #### TemporalScheduleService
 
 - `createCronWorkflow()` - Create a workflow scheduled by cron expression
 - `createIntervalWorkflow()` - Create a workflow scheduled by time interval
+- `getSchedule()` - Get a handle to an existing schedule
 - `pauseSchedule()` - Pause a schedule
 - `resumeSchedule()` - Resume a paused schedule
 - `deleteSchedule()` - Delete a schedule
 - `triggerNow()` - Trigger an immediate execution
-- `backfill()` - Run schedule actions for a past time range
 - `listSchedules()` - List all schedules
-- `describeSchedule()` - Get detailed schedule information
 
 #### WorkerManager
 
@@ -393,6 +483,7 @@ The module includes comprehensive error handling:
 - Activities and workflow errors are properly captured and logged
 - Connection errors are handled gracefully with automatic cleanup
 - Configurable failure modes for both client and worker connections
+- SDK version compatibility checks for feature availability
 
 ## Best Practices
 
@@ -401,12 +492,14 @@ The module includes comprehensive error handling:
     - Define activity interfaces for type safety
     - Keep activities focused on single responsibilities
     - Set appropriate timeouts for expected durations
+    - Use heartbeats for long-running activities
 
 2. **Workflow Design**
 
     - Make workflows deterministic
     - Use signals for external events
     - Use queries for retrieving workflow state
+    - Use updates for synchronous modifications
     - Avoid side effects in workflow code
 
 3. **Configuration**
@@ -415,16 +508,25 @@ The module includes comprehensive error handling:
     - Configure appropriate timeouts for activities and workflows
     - Use retry policies for transient failures
     - Set up monitoring for production deployments
+    - Enable worker versioning in production
 
-4. **Lifecycle Management**
+4. **Performance Optimization**
+
+    - Enable V8 context reuse for better performance
+    - Configure appropriate concurrency settings
+    - Use caching for frequently accessed workflows
+    - Balance worker thread pool size
+
+5. **Lifecycle Management**
 
     - Enable NestJS shutdown hooks
     - Configure proper worker shutdown grace periods
     - Use the WorkerManager service for controlling worker lifecycle
 
-5. **Security**
+6. **Security**
     - Implement proper TLS security for production environments
     - Use namespaces to isolate different environments
+    - Use API keys for Temporal Cloud authentication
 
 ## Contributing
 

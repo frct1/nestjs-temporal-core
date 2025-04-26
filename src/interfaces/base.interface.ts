@@ -40,7 +40,7 @@ export interface TlsOptions {
 }
 
 /**
- * Basic connection configuration
+ * Basic connection configuration for Temporal server
  */
 export interface ConnectionOptions {
     /**
@@ -54,11 +54,40 @@ export interface ConnectionOptions {
      * TLS configuration (optional)
      * If provided, connection will use TLS
      */
-    tls?: TlsOptions;
+    tls?: TlsOptions | boolean;
 
     /**
      * Connection timeout in milliseconds
      * @default 5000
      */
     connectionTimeout?: number;
+
+    /**
+     * API key for Temporal Cloud (if applicable)
+     */
+    apiKey?: string;
+
+    /**
+     * Optional HTTP headers to send with each request to the server
+     */
+    metadata?: Record<string, string>;
+
+    /**
+     * HTTP CONNECT proxy configuration for connecting through firewalls
+     */
+    proxy?: {
+        /**
+         * Target host for the proxy
+         * Format: "host:port"
+         */
+        targetHost: string;
+
+        /**
+         * Basic authentication for the proxy (if required)
+         */
+        basicAuth?: {
+            username: string;
+            password: string;
+        };
+    };
 }

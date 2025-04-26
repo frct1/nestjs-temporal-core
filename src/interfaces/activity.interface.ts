@@ -89,4 +89,10 @@ export interface ActivityMethodOptions {
          */
         nonRetryableErrorTypes?: string[];
     };
+
+    /**
+     * Controls how the SDK handles activity cancellation
+     * Aligns with Temporal ActivityCancellationType
+     */
+    cancellationType?: 'TRY_CANCEL' | 'WAIT_CANCELLATION_COMPLETED' | 'ABANDON';
 }

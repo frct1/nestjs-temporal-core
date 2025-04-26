@@ -14,5 +14,8 @@ export * from './workflow-method.decorator';
 export * from './query.decorator';
 export * from './signal.decorator';
 
+// Update decorator (new in Temporal)
+export * from './update.decorator';
+
 // Schedule decorators
 export * from './scheduled-workflow.decorator';

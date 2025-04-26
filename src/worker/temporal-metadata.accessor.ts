@@ -9,6 +9,8 @@ import {
     TEMPORAL_QUERY_NAME,
     TEMPORAL_SIGNAL_METHOD,
     TEMPORAL_SIGNAL_NAME,
+    TEMPORAL_UPDATE_METHOD,
+    TEMPORAL_UPDATE_NAME,
     TEMPORAL_WORKFLOW,
     TEMPORAL_WORKFLOW_METHOD,
     TEMPORAL_WORKFLOW_METHOD_NAME,
@@ -162,6 +164,28 @@ export class TemporalMetadataAccessor {
             return undefined;
         }
         return Reflect.getMetadata(TEMPORAL_SIGNAL_NAME, target);
+    }
+
+    /**
+     * Check if target is marked as a Temporal Update Method
+     * @param target Method to check
+     */
+    isUpdateMethod(target: Function): boolean {
+        if (!target) {
+            return false;
+        }
+        return !!Reflect.getMetadata(TEMPORAL_UPDATE_METHOD, target);
+    }
+
+    /**
+     * Get the name of the Update Method
+     * @param target Method to check
+     */
+    getUpdateMethodName(target: Function): string | undefined {
+        if (!target) {
+            return undefined;
+        }
+        return Reflect.getMetadata(TEMPORAL_UPDATE_NAME, target);
     }
 
     /**

@@ -7,13 +7,13 @@ import { WorkflowOptions } from '../interfaces/workflow.interface';
  */
 export interface ScheduledWorkflowOptions extends WorkflowOptions {
     /**
-     * Cron schedule for the workflow
-     * @example "0 * * * *" (run once every hour)
-     * @example "0 0 * * *" (run once every day at midnight)
+     * Schedule for the workflow
      */
     schedule: {
         /**
          * Cron expressions (standard UNIX cron format)
+         * @example "0 * * * *" (run once every hour)
+         * @example "0 0 * * *" (run once every day at midnight)
          */
         cron?: string;
 
@@ -49,6 +49,21 @@ export interface ScheduledWorkflowOptions extends WorkflowOptions {
  *     // Implementation
  *   }
  * }
+ *
+ * @ScheduledWorkflow({
+ *   taskQueue: 'scheduled-tasks',
+ *   schedule: {
+ *     interval: {
+ *       hours: 4 // Run every 4 hours
+ *     }
+ *   }
+ * })
+ * export class PeriodicCleanupWorkflow {
+ *   @WorkflowMethod()
+ *   async execute(): Promise<void> {
+ *     // Implementation
+ *   }
+ * }
  * ```
  */
 export function ScheduledWorkflow(options: ScheduledWorkflowOptions): ClassDecorator {
@@ -59,6 +74,10 @@ export function ScheduledWorkflow(options: ScheduledWorkflowOptions): ClassDecor
 
     if (!options.schedule) {
         throw new Error('schedule is required in ScheduledWorkflow decorator options');
+    }
+
+    if (!options.schedule.cron && !options.schedule.interval) {
+        throw new Error('Either cron or interval must be provided in schedule options');
     }
 
     return (target: any) => {

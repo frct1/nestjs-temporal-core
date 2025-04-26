@@ -7,7 +7,7 @@ import {
     OnModuleInit,
 } from '@nestjs/common';
 import { DiscoveryService } from '@nestjs/core';
-import { NativeConnection, Runtime, Worker, WorkerOptions } from '@temporalio/worker';
+import { NativeConnection, Worker } from '@temporalio/worker';
 import { TEMPORAL_WORKER_MODULE_OPTIONS, ERRORS } from '../constants';
 import { TemporalWorkerOptions } from '../interfaces';
 import { TemporalMetadataAccessor } from './temporal-metadata.accessor';
@@ -36,7 +36,7 @@ export class WorkerManager implements OnModuleInit, OnModuleDestroy, OnApplicati
     async onModuleInit() {
         try {
             this.logger.log('Initializing Temporal worker...');
-            await this.explore();
+            await this.setupWorker();
         } catch (error) {
             this.logger.error('Error during worker initialization', error);
 
@@ -147,31 +147,49 @@ export class WorkerManager implements OnModuleInit, OnModuleDestroy, OnApplicati
     /**
      * Set up the worker, discover activities, and prepare workflows
      */
-    private async explore() {
+    private async setupWorker() {
         if (!this.options.taskQueue) {
             throw new Error(ERRORS.MISSING_TASK_QUEUE);
         }
 
         // Gather activity implementations
-        const activities = await this.handleActivities();
+        const activities = await this.discoverActivities();
 
-        // Set up runtime if options are provided
-        if (this.options.runtimeOptions) {
-            this.logger.debug('Installing custom runtime options');
-            Runtime.install(this.options.runtimeOptions);
-        }
-
-        // Prepare additional worker options
-        const workerOptions: WorkerOptions = {
-            taskQueue: this.options.taskQueue,
-            workflowsPath: this.options.workflowsPath,
-            activities,
-            ...this.options.workerOptions,
-        };
+        // Convert ConnectionOptions to NativeConnectionOptions
+        const connectionOptions = this.prepareConnectionOptions(this.options.connection);
 
         // Connect to Temporal server
-        this.logger.debug(`Connecting to Temporal server at ${this.options.connection.address}`);
-        this.connection = await NativeConnection.connect(this.options.connection);
+        this.logger.debug(`Connecting to Temporal server at ${connectionOptions.address}`);
+        this.connection = await NativeConnection.connect(connectionOptions);
+
+        // Create worker options
+        const workerOptions = {
+            taskQueue: this.options.taskQueue,
+            activities,
+            workflowsPath: this.options.workflowsPath,
+            // Apply default worker configuration options
+            maxConcurrentActivityTaskExecutions:
+                this.options.maxConcurrentActivityTaskExecutions ?? 100,
+            maxConcurrentLocalActivityExecutions:
+                this.options.maxConcurrentLocalActivityExecutions ?? 100,
+            maxConcurrentWorkflowTaskExecutions:
+                this.options.maxConcurrentWorkflowTaskExecutions ?? 40,
+            reuseV8Context: this.options.reuseV8Context ?? true,
+            // Apply additional options if provided
+            ...(this.options.maxActivitiesPerSecond && {
+                maxActivitiesPerSecond: this.options.maxActivitiesPerSecond,
+            }),
+            ...(this.options.maxTaskQueueActivitiesPerSecond && {
+                maxTaskQueueActivitiesPerSecond: this.options.maxTaskQueueActivitiesPerSecond,
+            }),
+            ...(this.options.workflowThreadPoolSize && {
+                workflowThreadPoolSize: this.options.workflowThreadPoolSize,
+            }),
+            ...(this.options.useVersioning && { useVersioning: this.options.useVersioning }),
+            ...(this.options.buildId && { buildId: this.options.buildId }),
+            ...(this.options.debugMode && { debugMode: this.options.debugMode }),
+            ...(this.options.dataConverter && { dataConverter: this.options.dataConverter }),
+        };
 
         // Create the worker
         this.worker = await Worker.create({
@@ -186,9 +204,52 @@ export class WorkerManager implements OnModuleInit, OnModuleDestroy, OnApplicati
     }
 
     /**
+     * Transform ConnectionOptions into NativeConnectionOptions
+     * This handles the differences between our interface and Temporal's expected format
+     * @param options Our connection options
+     * @returns Temporal-compatible NativeConnectionOptions
+     */
+    private prepareConnectionOptions(options: any): any {
+        const nativeOptions: any = {
+            address: options.address,
+        };
+
+        // Handle TLS options
+        if (options.tls) {
+            nativeOptions.tls = options.tls;
+        }
+
+        // Handle metadata and API key
+        if (options.metadata || options.apiKey) {
+            nativeOptions.metadata = { ...(options.metadata || {}) };
+
+            // Add API key to metadata if provided
+            if (options.apiKey) {
+                nativeOptions.metadata.authorization = `Bearer ${options.apiKey}`;
+            }
+        }
+
+        // Handle proxy configuration - fix the incompatible format
+        if (options.proxy) {
+            nativeOptions.proxy = {
+                type: 'http-connect', // Add required 'type' property
+                targetHost: options.proxy.targetHost,
+                ...(options.proxy.basicAuth && { basicAuth: options.proxy.basicAuth }),
+            };
+        }
+
+        // Handle connection timeout
+        if (options.connectionTimeout) {
+            nativeOptions.connectionTimeout = options.connectionTimeout;
+        }
+
+        return nativeOptions;
+    }
+
+    /**
      * Discover and register activity implementations from providers
      */
-    private async handleActivities() {
+    private async discoverActivities() {
         const activities: Record<string, (...args: any[]) => any> = {};
         const providers = this.discoveryService.getProviders();
 
@@ -212,7 +273,7 @@ export class WorkerManager implements OnModuleInit, OnModuleDestroy, OnApplicati
 
         this.logger.log(`Found ${activityProviders.length} activity providers`);
 
-        // Use the extractActivityMethods helper from our enhanced metadata accessor
+        // Extract activity methods
         for (const wrapper of activityProviders) {
             const { instance } = wrapper;
             if (!instance) continue;

@@ -5,6 +5,9 @@ import { QueryMethodOptions } from '../interfaces/workflow.interface';
 /**
  * Decorator that marks a method as a Temporal Query Method
  *
+ * Queries allow you to get the current state of a workflow without modifying it.
+ * Query methods should be synchronous (not async) and should not have side effects.
+ *
  * @param options Optional configuration or query name string
  *
  * @example
@@ -12,6 +15,7 @@ import { QueryMethodOptions } from '../interfaces/workflow.interface';
  * @Workflow({ taskQueue: 'my-task-queue' })
  * export class OrderWorkflow {
  *   private orderStatus: string = 'PENDING';
+ *   private orderItems: Item[] = [];
  *
  *   @WorkflowMethod()
  *   async execute(orderId: string): Promise<string> {
@@ -21,6 +25,14 @@ import { QueryMethodOptions } from '../interfaces/workflow.interface';
  *   @Query()
  *   getStatus(): string {
  *     return this.orderStatus;
+ *   }
+ *
+ *   @Query('getOrderDetails')
+ *   getOrderDetails(): OrderDetails {
+ *     return {
+ *       status: this.orderStatus,
+ *       items: this.orderItems,
+ *     };
  *   }
  * }
  * ```

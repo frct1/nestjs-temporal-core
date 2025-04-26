@@ -46,6 +46,24 @@ export interface WorkflowOptions {
      * Retry policy for workflow execution
      */
     retry?: RetryPolicy;
+
+    /**
+     * Cron schedule for recurring workflows (if applicable)
+     * Format: standard cron expression
+     */
+    cronSchedule?: string;
+
+    /**
+     * Policy for workflow ID reuse
+     * Controls what happens when trying to start a workflow with the same ID as a closed workflow
+     */
+    workflowIdReusePolicy?: 'ALLOW_DUPLICATE' | 'ALLOW_DUPLICATE_FAILED_ONLY' | 'REJECT_DUPLICATE';
+
+    /**
+     * Policy for workflow ID conflicts
+     * Controls what happens when trying to start a workflow with the same ID as a running workflow
+     */
+    workflowIdConflictPolicy?: 'FAIL' | 'USE_EXISTING' | 'TERMINATE_EXISTING';
 }
 
 /**
@@ -79,4 +97,22 @@ export interface SignalMethodOptions {
      * If not provided, the method name will be used
      */
     name?: string;
+}
+
+/**
+ * Options for Workflow Updates
+ * Workflow updates are a way to invoke a workflow method while it's running
+ * and receive a synchronous result.
+ */
+export interface UpdateMethodOptions {
+    /**
+     * Name for the update method
+     * If not provided, the method name will be used
+     */
+    name?: string;
+
+    /**
+     * Validation function for update arguments
+     */
+    validator?: (...args: any[]) => void;
 }

@@ -2,9 +2,56 @@
  * Interfaces for the Temporal Client module
  */
 import { ModuleMetadata, Type } from '@nestjs/common';
-import { RetryPolicy, WorkflowIdReusePolicy, WorkflowIdConflictPolicy } from '@temporalio/client';
-import { Duration, SearchAttributes } from '@temporalio/common';
+import { RetryPolicy, SearchAttributes } from '@temporalio/common';
+import { Duration } from '@temporalio/common';
 import { ConnectionOptions } from './base.interface';
+
+/**
+ * WorkflowId conflict policies for starting workflows
+ */
+export const WorkflowIdConflictPolicy = {
+    /**
+     * Do not start a new Workflow. Instead raise an error.
+     */
+    FAIL: 'FAIL',
+
+    /**
+     * Do not start a new Workflow. Instead return a Workflow Handle for the already Running Workflow.
+     */
+    USE_EXISTING: 'USE_EXISTING',
+
+    /**
+     * Start a new Workflow, terminating the current workflow if one is already running.
+     */
+    TERMINATE_EXISTING: 'TERMINATE_EXISTING',
+};
+
+export type WorkflowIdConflictPolicy =
+    (typeof WorkflowIdConflictPolicy)[keyof typeof WorkflowIdConflictPolicy];
+
+/**
+ * WorkflowId reuse policies for starting workflows
+ */
+export const WorkflowIdReusePolicy = {
+    /**
+     * The Workflow can be started if the previous Workflow is in a Closed state.
+     * @default
+     */
+    ALLOW_DUPLICATE: 'ALLOW_DUPLICATE',
+
+    /**
+     * The Workflow can be started if the previous Workflow is in a Closed state that is not Completed.
+     */
+    ALLOW_DUPLICATE_FAILED_ONLY: 'ALLOW_DUPLICATE_FAILED_ONLY',
+
+    /**
+     * The Workflow cannot be started.
+     */
+    REJECT_DUPLICATE: 'REJECT_DUPLICATE',
+};
+
+export type WorkflowIdReusePolicy =
+    (typeof WorkflowIdReusePolicy)[keyof typeof WorkflowIdReusePolicy];
 
 /**
  * Client module configuration options
@@ -101,7 +148,6 @@ export interface TemporalClientAsyncOptions extends Pick<ModuleMetadata, 'import
 
 /**
  * Options for starting a workflow
- * Uses Temporal's native types where applicable
  */
 export interface StartWorkflowOptions {
     /**
@@ -117,7 +163,17 @@ export interface StartWorkflowOptions {
     /**
      * Signal to send to the workflow upon start (optional)
      */
-    signal?: string;
+    signal?: {
+        /**
+         * Name of the signal to send
+         */
+        name: string;
+
+        /**
+         * Arguments to pass to the signal
+         */
+        args?: any[];
+    };
 
     /**
      * Cron schedule for recurring workflows (optional)
@@ -161,8 +217,15 @@ export interface StartWorkflowOptions {
 
     /**
      * Search attributes for the workflow
+     * @deprecated Use typedSearchAttributes instead
      */
     searchAttributes?: SearchAttributes;
+
+    /**
+     * Typed search attributes for the workflow
+     * This is a newer feature that may not be available in all SDK versions
+     */
+    typedSearchAttributes?: Record<string, unknown>;
 
     /**
      * Whether to follow workflow runs

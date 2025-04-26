@@ -9,6 +9,10 @@ import { ActivityMethodOptions } from '../interfaces/activity.interface';
 /**
  * Decorator that marks a method as a Temporal Activity Method
  *
+ * Activity methods are the implementation of individual activities that can be
+ * executed by a workflow. They can be asynchronous and can communicate with
+ * external systems.
+ *
  * @param options Optional configuration or activity name string
  *
  * @example
@@ -18,11 +22,32 @@ import { ActivityMethodOptions } from '../interfaces/activity.interface';
  *   @ActivityMethod()
  *   async sendWelcomeEmail(to: string): Promise<boolean> {
  *     // Implementation
+ *     return true;
  *   }
  *
  *   @ActivityMethod('processPayment')
  *   async processPayment(orderId: string, amount: number): Promise<string> {
  *     // Implementation
+ *     return 'payment-id';
+ *   }
+ *
+ *   @ActivityMethod({
+ *     name: 'sendInvoice',
+ *     timeout: {
+ *       startToClose: '30s',
+ *       heartbeat: '5s'
+ *     },
+ *     retry: {
+ *       maximumAttempts: 3,
+ *       initialInterval: '1s'
+ *     }
+ *   })
+ *   async sendInvoice(orderId: string): Promise<void> {
+ *     // Implementation with heartbeats
+ *     const context = Context.current();
+ *     context.heartbeat('Starting to send invoice');
+ *     // Processing...
+ *     context.heartbeat('Invoice sent');
  *   }
  * }
  * ```

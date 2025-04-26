@@ -22,6 +22,11 @@ import { SignalMethodOptions } from '../interfaces/workflow.interface';
  *   async cancel(reason: string): Promise<void> {
  *     this.orderStatus = 'CANCELLED';
  *   }
+ *
+ *   @Signal('updateShipping')
+ *   async updateShippingAddress(address: Address): Promise<void> {
+ *     // Update shipping address logic
+ *   }
  * }
  * ```
  */

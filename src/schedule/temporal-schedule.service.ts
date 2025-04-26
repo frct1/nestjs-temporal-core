@@ -1,13 +1,5 @@
 import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
-import {
-    Client,
-    ScheduleClient,
-    ScheduleHandle,
-    ScheduleSummary,
-    ScheduleDescription,
-    ScheduleOverlapPolicy,
-    Backfill,
-} from '@temporalio/client';
+import { Client, ScheduleClient, ScheduleHandle, ScheduleOverlapPolicy } from '@temporalio/client';
 import { ERRORS, TEMPORAL_CLIENT, TEMPORAL_SCHEDULE_MODULE_OPTIONS } from '../constants';
 import { TemporalScheduleOptions } from '../interfaces';
 
@@ -25,10 +17,20 @@ export class TemporalScheduleService implements OnModuleInit {
 
     async onModuleInit(): Promise<void> {
         if (this.client) {
-            this.scheduleClient = this.client.schedule;
-            this.logger.log(
-                `Temporal schedule client initialized with namespace: ${this.options.namespace}`,
-            );
+            try {
+                // Check if schedule client is available (might not be in older SDK versions)
+                if (typeof this.client.schedule === 'undefined') {
+                    this.logger.warn('Schedule client not available in this Temporal SDK version');
+                    return;
+                }
+
+                this.scheduleClient = this.client.schedule;
+                this.logger.log(
+                    `Temporal schedule client initialized with namespace: ${this.options.namespace}`,
+                );
+            } catch (error) {
+                this.logger.error('Failed to initialize schedule client', error);
+            }
         } else {
             this.logger.warn(
                 'Temporal client not initialized - schedule features will be unavailable',
@@ -123,7 +125,8 @@ export class TemporalScheduleService implements OnModuleInit {
             if (interval.minutes) totalMs += interval.minutes * msPerMinute;
             if (interval.seconds) totalMs += interval.seconds * msPerSecond;
 
-            if (totalMs === 0) totalMs = msPerMinute; // Default to 1 minute if no interval specified
+            // Default to 1 minute if no interval specified
+            if (totalMs === 0) totalMs = msPerMinute;
 
             const handle = await this.scheduleClient!.create({
                 scheduleId,
@@ -231,14 +234,17 @@ export class TemporalScheduleService implements OnModuleInit {
      * Trigger an immediate run of a scheduled workflow
      *
      * @param scheduleId ID of the schedule to trigger
-     * @param overlap How to handle overlapping executions
+     * @param overlap How to handle overlapping executions (default: ALLOW_ALL)
      */
-    async triggerNow(scheduleId: string, overlap?: ScheduleOverlapPolicy): Promise<void> {
+    async triggerNow(
+        scheduleId: string,
+        overlap: ScheduleOverlapPolicy = 'ALLOW_ALL',
+    ): Promise<void> {
         this.ensureClientInitialized();
 
         try {
             const handle = this.scheduleClient!.getHandle(scheduleId);
-            await handle.trigger(overlap || ScheduleOverlapPolicy.ALLOW_ALL);
+            await handle.trigger(overlap);
             this.logger.log(`Triggered immediate run of schedule: ${scheduleId}`);
         } catch (error) {
             this.logger.error(`Failed to trigger schedule '${scheduleId}': ${error.message}`);
@@ -247,69 +253,17 @@ export class TemporalScheduleService implements OnModuleInit {
     }
 
     /**
-     * Run schedule actions for a past time period (backfill)
-     *
-     * @param scheduleId ID of the schedule
-     * @param startTime Start of the time range
-     * @param endTime End of the time range
-     * @param overlap How to handle overlapping executions
-     */
-    async backfill(
-        scheduleId: string,
-        startTime: Date,
-        endTime: Date,
-        overlap?: ScheduleOverlapPolicy,
-    ): Promise<void> {
-        this.ensureClientInitialized();
-
-        try {
-            const handle = this.scheduleClient!.getHandle(scheduleId);
-            const backfill: Backfill = {
-                start: startTime,
-                end: endTime,
-                overlap: overlap || ScheduleOverlapPolicy.ALLOW_ALL,
-            };
-
-            await handle.backfill(backfill);
-            this.logger.log(
-                `Backfilled schedule: ${scheduleId} from ${startTime.toISOString()} to ${endTime.toISOString()}`,
-            );
-        } catch (error) {
-            this.logger.error(`Failed to backfill schedule '${scheduleId}': ${error.message}`);
-            throw new Error(`Failed to backfill schedule '${scheduleId}': ${error.message}`);
-        }
-    }
-
-    /**
-     * Get detailed information about a schedule
-     *
-     * @param scheduleId ID of the schedule
-     * @returns Schedule description with detailed information
-     */
-    async describeSchedule(scheduleId: string): Promise<ScheduleDescription> {
-        this.ensureClientInitialized();
-
-        try {
-            const handle = this.scheduleClient!.getHandle(scheduleId);
-            return await handle.describe();
-        } catch (error) {
-            this.logger.error(`Failed to describe schedule '${scheduleId}': ${error.message}`);
-            throw new Error(`Failed to describe schedule '${scheduleId}': ${error.message}`);
-        }
-    }
-
-    /**
      * List all schedules
      *
-     * @param pageSize Maximum number of schedules to return
+     * @param pageSize Maximum number of schedules to return (default: 100)
      * @returns Array of schedule summaries
      */
-    async listSchedules(pageSize = 100): Promise<ScheduleSummary[]> {
+    async listSchedules(pageSize = 100): Promise<any[]> {
         this.ensureClientInitialized();
 
         try {
             // Collect all schedules in an array
-            const schedules: ScheduleSummary[] = [];
+            const schedules: any[] = [];
             for await (const schedule of this.scheduleClient!.list({ pageSize })) {
                 schedules.push(schedule);
             }

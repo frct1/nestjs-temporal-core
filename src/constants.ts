@@ -45,6 +45,13 @@ export const TEMPORAL_QUERY_METHOD = 'TEMPORAL_QUERY_METHOD';
 export const TEMPORAL_QUERY_NAME = 'TEMPORAL_QUERY_NAME';
 
 // ==========================================
+// Update-related metadata keys
+// ==========================================
+export const TEMPORAL_UPDATE_METHOD = 'TEMPORAL_UPDATE_METHOD';
+export const TEMPORAL_UPDATE_NAME = 'TEMPORAL_UPDATE_NAME';
+export const TEMPORAL_UPDATE_VALIDATOR = 'TEMPORAL_UPDATE_VALIDATOR';
+
+// ==========================================
 // Default values
 // ==========================================
 export const DEFAULT_NAMESPACE = 'default';
@@ -67,4 +74,93 @@ export const ERRORS = {
     WORKFLOW_NOT_FOUND: 'Workflow not found',
     INVALID_DECORATOR_USAGE: 'Invalid decorator usage',
     SCHEDULE_CLIENT_NOT_INITIALIZED: 'Temporal schedule client not initialized',
+    INCOMPATIBLE_SDK_VERSION: 'This feature requires a newer version of the Temporal SDK',
+};
+
+// ==========================================
+// Activity Cancellation Type
+// ==========================================
+export const ActivityCancellationType = {
+    TRY_CANCEL: 'TRY_CANCEL',
+    WAIT_CANCELLATION_COMPLETED: 'WAIT_CANCELLATION_COMPLETED',
+    ABANDON: 'ABANDON',
+} as const;
+export type ActivityCancellationType =
+    (typeof ActivityCancellationType)[keyof typeof ActivityCancellationType];
+
+// ==========================================
+// Workflow ID Reuse Policy
+// ==========================================
+export const WorkflowIdReusePolicy = {
+    ALLOW_DUPLICATE: 'ALLOW_DUPLICATE',
+    ALLOW_DUPLICATE_FAILED_ONLY: 'ALLOW_DUPLICATE_FAILED_ONLY',
+    REJECT_DUPLICATE: 'REJECT_DUPLICATE',
+    TERMINATE_IF_RUNNING: 'TERMINATE_IF_RUNNING',
+} as const;
+export type WorkflowIdReusePolicy =
+    (typeof WorkflowIdReusePolicy)[keyof typeof WorkflowIdReusePolicy];
+
+// ==========================================
+// Workflow ID Conflict Policy
+// ==========================================
+export const WorkflowIdConflictPolicy = {
+    FAIL: 'FAIL',
+    USE_EXISTING: 'USE_EXISTING',
+    TERMINATE_EXISTING: 'TERMINATE_EXISTING',
+} as const;
+export type WorkflowIdConflictPolicy =
+    (typeof WorkflowIdConflictPolicy)[keyof typeof WorkflowIdConflictPolicy];
+
+// ==========================================
+// Child Workflow Cancellation Type
+// ==========================================
+export const ChildWorkflowCancellationType = {
+    ABANDON: 'ABANDON',
+    TRY_CANCEL: 'TRY_CANCEL',
+    WAIT_CANCELLATION_COMPLETED: 'WAIT_CANCELLATION_COMPLETED',
+    WAIT_CANCELLATION_REQUESTED: 'WAIT_CANCELLATION_REQUESTED',
+} as const;
+export type ChildWorkflowCancellationType =
+    (typeof ChildWorkflowCancellationType)[keyof typeof ChildWorkflowCancellationType];
+
+// ==========================================
+// Parent Close Policy
+// ==========================================
+export const ParentClosePolicy = {
+    TERMINATE: 'TERMINATE',
+    ABANDON: 'ABANDON',
+    REQUEST_CANCEL: 'REQUEST_CANCEL',
+} as const;
+export type ParentClosePolicy = (typeof ParentClosePolicy)[keyof typeof ParentClosePolicy];
+
+// ==========================================
+// Schedule Overlap Policy
+// ==========================================
+export const ScheduleOverlapPolicy = {
+    ALLOW_ALL: 'ALLOW_ALL',
+    SKIP: 'SKIP',
+    BUFFER_ONE: 'BUFFER_ONE',
+    BUFFER_ALL: 'BUFFER_ALL',
+    CANCEL_OTHER: 'CANCEL_OTHER',
+} as const;
+export type ScheduleOverlapPolicy =
+    (typeof ScheduleOverlapPolicy)[keyof typeof ScheduleOverlapPolicy];
+
+// ==========================================
+// Worker Versioning Intent
+// ==========================================
+export const VersioningIntent = {
+    DEFAULT: 'DEFAULT',
+    COMPATIBLE: 'COMPATIBLE',
+    UNVERSIONED: 'UNVERSIONED',
+} as const;
+export type VersioningIntent = (typeof VersioningIntent)[keyof typeof VersioningIntent];
+
+// ==========================================
+// SDK Compatibility Flags
+// ==========================================
+export const SDK_FEATURES = {
+    HAS_WORKFLOW_UPDATES: undefined as boolean | undefined,
+    HAS_WORKER_VERSIONING: undefined as boolean | undefined,
+    HAS_TYPED_SEARCH_ATTRIBUTES: undefined as boolean | undefined,
 };

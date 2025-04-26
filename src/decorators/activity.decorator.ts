@@ -5,6 +5,9 @@ import { ActivityOptions } from '../interfaces/activity.interface';
 /**
  * Decorator that marks a class as a Temporal Activity
  *
+ * Activities are the basic unit of work in Temporal. They can be retried independently
+ * from the Workflow and are executed outside of the Workflow context.
+ *
  * @param options Optional activity configuration
  *
  * @example

@@ -39,9 +39,17 @@ export class TemporalClientModule {
         try {
             this.logger.log(`Connecting to Temporal server at ${options.connection.address}`);
 
+            // Create connection with appropriate options
             connection = await Connection.connect({
                 address: options.connection.address,
                 tls: options.connection.tls,
+                metadata: options.connection.metadata,
+                ...(options.connection.apiKey && {
+                    metadata: {
+                        ...options.connection.metadata,
+                        authorization: `Bearer ${options.connection.apiKey}`,
+                    },
+                }),
                 ...(options.connection.connectionTimeout && {
                     connectionTimeout: options.connection.connectionTimeout,
                 }),
