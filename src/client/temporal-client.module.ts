@@ -19,6 +19,7 @@ import {
     ERRORS,
 } from '../constants';
 import { TemporalClientService } from './temporal-client.service';
+import { TemporalScheduleService } from './temporal-schedule.service';
 
 /**
  * Global module for Temporal client configuration
@@ -113,8 +114,9 @@ export class TemporalClientModule {
                 },
                 clientProvider,
                 TemporalClientService,
+                TemporalScheduleService,
             ],
-            exports: [TemporalClientService],
+            exports: [TemporalClientService, TemporalScheduleService],
         };
     }
 
@@ -152,8 +154,9 @@ export class TemporalClientModule {
                 ...this.createAsyncProviders(options),
                 clientProvider,
                 TemporalClientService,
+                TemporalScheduleService,
             ],
-            exports: [TemporalClientService],
+            exports: [TemporalClientService, TemporalScheduleService],
         };
     }
 

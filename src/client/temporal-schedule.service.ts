@@ -1,7 +1,6 @@
 import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Client, ScheduleClient, ScheduleHandle, ScheduleOverlapPolicy } from '@temporalio/client';
-import { ERRORS, TEMPORAL_CLIENT, TEMPORAL_SCHEDULE_MODULE_OPTIONS } from '../constants';
-import { TemporalScheduleOptions } from '../interfaces';
+import { TEMPORAL_CLIENT, ERRORS } from '../constants';
 
 @Injectable()
 export class TemporalScheduleService implements OnModuleInit {
@@ -9,11 +8,13 @@ export class TemporalScheduleService implements OnModuleInit {
     private scheduleClient: ScheduleClient | null = null;
 
     constructor(
-        @Inject(TEMPORAL_SCHEDULE_MODULE_OPTIONS)
-        private readonly options: TemporalScheduleOptions,
         @Inject(TEMPORAL_CLIENT)
         private readonly client: Client | null,
-    ) {}
+    ) {
+        if (this.client && this.client.schedule) {
+            this.scheduleClient = this.client.schedule;
+        }
+    }
 
     async onModuleInit(): Promise<void> {
         if (this.client) {
@@ -25,9 +26,7 @@ export class TemporalScheduleService implements OnModuleInit {
                 }
 
                 this.scheduleClient = this.client.schedule;
-                this.logger.log(
-                    `Temporal schedule client initialized with namespace: ${this.options.namespace}`,
-                );
+                this.logger.log('Temporal schedule client initialized');
             } catch (error) {
                 this.logger.error('Failed to initialize schedule client', error);
             }
@@ -183,7 +182,7 @@ export class TemporalScheduleService implements OnModuleInit {
         this.ensureClientInitialized();
 
         try {
-            const handle = this.scheduleClient!.getHandle(scheduleId);
+            const handle = await this.scheduleClient!.getHandle(scheduleId);
             await handle.delete();
             this.logger.log(`Deleted schedule: ${scheduleId}`);
         } catch (error) {
@@ -202,7 +201,7 @@ export class TemporalScheduleService implements OnModuleInit {
         this.ensureClientInitialized();
 
         try {
-            const handle = this.scheduleClient!.getHandle(scheduleId);
+            const handle = await this.scheduleClient!.getHandle(scheduleId);
             await handle.pause(note || 'Paused via NestJS Temporal integration');
             this.logger.log(`Paused schedule: ${scheduleId}${note ? ` (${note})` : ''}`);
         } catch (error) {
@@ -221,7 +220,7 @@ export class TemporalScheduleService implements OnModuleInit {
         this.ensureClientInitialized();
 
         try {
-            const handle = this.scheduleClient!.getHandle(scheduleId);
+            const handle = await this.scheduleClient!.getHandle(scheduleId);
             await handle.unpause(note || 'Resumed via NestJS Temporal integration');
             this.logger.log(`Resumed schedule: ${scheduleId}`);
         } catch (error) {
@@ -243,7 +242,7 @@ export class TemporalScheduleService implements OnModuleInit {
         this.ensureClientInitialized();
 
         try {
-            const handle = this.scheduleClient!.getHandle(scheduleId);
+            const handle = await this.scheduleClient!.getHandle(scheduleId);
             await handle.trigger(overlap);
             this.logger.log(`Triggered immediate run of schedule: ${scheduleId}`);
         } catch (error) {
@@ -272,6 +271,68 @@ export class TemporalScheduleService implements OnModuleInit {
             this.logger.error(`Failed to list schedules: ${error.message}`);
             throw new Error(`Failed to list schedules: ${error.message}`);
         }
+    }
+
+    /**
+     * Search for schedules matching a query
+     *
+     * @param query Query string to filter schedules
+     * @param pageSize Maximum number of schedules to return per page
+     * @returns Array of matching schedule summaries
+     */
+    async searchSchedules(query: string, pageSize = 100): Promise<any[]> {
+        this.ensureClientInitialized();
+
+        try {
+            const schedules: any[] = [];
+            for await (const schedule of this.scheduleClient!.list({ query, pageSize })) {
+                schedules.push(schedule);
+            }
+            return schedules;
+        } catch (error) {
+            this.logger.error(`Failed to search schedules with query '${query}': ${error.message}`);
+            throw new Error(`Failed to search schedules with query '${query}': ${error.message}`);
+        }
+    }
+
+    /**
+     * Backfill a schedule by running it for past time periods
+     *
+     * @param scheduleId ID of the schedule to backfill
+     * @param startTime Start of the time range for backfill
+     * @param endTime End of the time range for backfill
+     * @param overlap How to handle overlapping executions (default: ALLOW_ALL)
+     */
+    async backfillSchedule(
+        scheduleId: string,
+        startTime: Date,
+        endTime: Date,
+        overlap: ScheduleOverlapPolicy = 'ALLOW_ALL',
+    ): Promise<void> {
+        this.ensureClientInitialized();
+
+        try {
+            const handle = await this.scheduleClient!.getHandle(scheduleId);
+            await handle.backfill({
+                start: startTime,
+                end: endTime,
+                overlap,
+            });
+            this.logger.log(
+                `Backfilled schedule ${scheduleId} from ${startTime.toISOString()} to ${endTime.toISOString()}`,
+            );
+        } catch (error) {
+            this.logger.error(`Failed to backfill schedule '${scheduleId}': ${error.message}`);
+            throw new Error(`Failed to backfill schedule '${scheduleId}': ${error.message}`);
+        }
+    }
+
+    /**
+     * Get the Temporal Schedule client
+     * @returns The schedule client
+     */
+    getScheduleClient(): ScheduleClient | null {
+        return this.scheduleClient;
     }
 
     /**

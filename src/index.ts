@@ -9,8 +9,7 @@ export * from './client/temporal-client.service';
 export * from './worker/temporal-worker.module';
 export * from './worker/worker-manager.service';
 export * from './worker/temporal-metadata.accessor';
-export * from './schedule/temporal-schedule.module';
-export * from './schedule/temporal-schedule.service';
+export * from './client/temporal-schedule.service';
 
 // Export decorators explicitly
 export * from './decorators';
