@@ -339,6 +339,7 @@ When integrating Temporal with your NestJS application, organizing your code pro
 
 ```
 
+```
 src/
 ├── temporal/
 │ ├── activities/
@@ -364,29 +365,33 @@ src/
 │ └── payment.module.ts
 └── app.module.ts
 
-````
+```
 
 ### Key Files and Their Purpose
 
 1. **Activities (src/temporal/activities/)**:
-   - Contains activity classes decorated with `@Activity()`
-   - Each activity class should group related functionality
+
+    - Contains activity classes decorated with `@Activity()`
+    - Each activity class should group related functionality
 
 2. **Workflows (src/temporal/workflows/)**:
-   - Contains workflow definitions that orchestrate activities
-   - Workflows should be in separate files based on domain
+
+    - Contains workflow definitions that orchestrate activities
+    - Workflows should be in separate files based on domain
 
 3. **Interfaces (src/temporal/interfaces/)**:
-   - TypeScript interfaces that define activity and workflow parameters/returns
-   - Helps maintain type safety between activities and workflows
+
+    - TypeScript interfaces that define activity and workflow parameters/returns
+    - Helps maintain type safety between activities and workflows
 
 4. **Temporal Module (src/temporal/temporal.module.ts)**:
-   - Centralizes Temporal configuration
-   - Imports and registers all activities
 
-5. **Business Services (src/modules/*/)**:
-   - Inject the TemporalService
-   - Use it to start workflows and interact with Temporal
+    - Centralizes Temporal configuration
+    - Imports and registers all activities
+
+5. **Business Services (src/modules/\*/)**:
+    - Inject the TemporalService
+    - Use it to start workflows and interact with Temporal
 
 ## Integration Examples
 
@@ -401,29 +406,29 @@ import { EmailService } from '../../modules/email/email.service';
 @Injectable()
 @Activity()
 export class EmailActivities {
-  constructor(private readonly emailService: EmailService) {}
+    constructor(private readonly emailService: EmailService) {}
 
-  @ActivityMethod()
-  async sendWelcomeEmail(to: string, name: string): Promise<boolean> {
-    await this.emailService.sendEmail({
-      to,
-      subject: 'Welcome!',
-      body: `Hello ${name}, welcome to our platform!`,
-    });
-    return true;
-  }
+    @ActivityMethod()
+    async sendWelcomeEmail(to: string, name: string): Promise<boolean> {
+        await this.emailService.sendEmail({
+            to,
+            subject: 'Welcome!',
+            body: `Hello ${name}, welcome to our platform!`,
+        });
+        return true;
+    }
 
-  @ActivityMethod()
-  async sendPasswordReset(to: string, resetToken: string): Promise<boolean> {
-    await this.emailService.sendEmail({
-      to,
-      subject: 'Password Reset',
-      body: `Please use this token to reset your password: ${resetToken}`,
-    });
-    return true;
-  }
+    @ActivityMethod()
+    async sendPasswordReset(to: string, resetToken: string): Promise<boolean> {
+        await this.emailService.sendEmail({
+            to,
+            subject: 'Password Reset',
+            body: `Please use this token to reset your password: ${resetToken}`,
+        });
+        return true;
+    }
 }
-````
+```
 
 ```typescript
 // src/temporal/activities/index.ts
