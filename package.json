@@ -52,9 +52,9 @@
   "peerDependencies": {
     "@nestjs/common": "^9.0.0 || ^10.0.0 || ^11.0.0",
     "@nestjs/core": "^9.0.0 || ^10.0.0 || ^11.0.0",
-    "@temporalio/client": "^1.8.0",
-    "@temporalio/worker": "^1.8.0",
-    "@temporalio/workflow": "^1.8.0",
+    "@temporalio/client": "^1.11.7",
+    "@temporalio/worker": "^1.11.7",
+    "@temporalio/workflow": "^1.11.7",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1"
   },
