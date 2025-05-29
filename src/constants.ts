@@ -1,8 +1,5 @@
 /**
  * Constants used throughout the NestJS Temporal integration
- *
- * This file contains injection tokens, metadata keys, and default values
- * that are used consistently across the package.
  */
 
 // ==========================================
@@ -15,7 +12,7 @@ export const TEMPORAL_CLIENT = 'TEMPORAL_CLIENT';
 export const TEMPORAL_CONNECTION = 'TEMPORAL_CONNECTION';
 
 // ==========================================
-// Activity-related metadata keys
+// Activity-related metadata keys (existing)
 // ==========================================
 export const TEMPORAL_ACTIVITY = 'TEMPORAL_ACTIVITY';
 export const TEMPORAL_ACTIVITY_METHOD = 'TEMPORAL_ACTIVITY_METHOD';
@@ -23,24 +20,36 @@ export const TEMPORAL_ACTIVITY_METHOD_NAME = 'TEMPORAL_ACTIVITY_METHOD_NAME';
 export const TEMPORAL_ACTIVITY_METHOD_OPTIONS = 'TEMPORAL_ACTIVITY_METHOD_OPTIONS';
 
 // ==========================================
-// Workflow-related metadata keys
+// Traditional workflow metadata keys (existing)
 // ==========================================
 export const TEMPORAL_WORKFLOW = 'TEMPORAL_WORKFLOW';
 export const TEMPORAL_WORKFLOW_METHOD = 'TEMPORAL_WORKFLOW_METHOD';
 export const TEMPORAL_WORKFLOW_METHOD_NAME = 'TEMPORAL_WORKFLOW_METHOD_NAME';
 export const TEMPORAL_WORKFLOW_OPTIONS = 'TEMPORAL_WORKFLOW_OPTIONS';
+export const TEMPORAL_WORKFLOW_METHOD_OPTIONS = 'TEMPORAL_WORKFLOW_METHOD_OPTIONS';
 
 // ==========================================
-// Signal-related metadata keys
+// Signal and Query metadata keys (existing)
 // ==========================================
 export const TEMPORAL_SIGNAL_METHOD = 'TEMPORAL_SIGNAL_METHOD';
 export const TEMPORAL_SIGNAL_NAME = 'TEMPORAL_SIGNAL_NAME';
-
-// ==========================================
-// Query-related metadata keys
-// ==========================================
 export const TEMPORAL_QUERY_METHOD = 'TEMPORAL_QUERY_METHOD';
 export const TEMPORAL_QUERY_NAME = 'TEMPORAL_QUERY_NAME';
+
+// ==========================================
+// NEW: Workflow Controller metadata keys
+// ==========================================
+export const TEMPORAL_WORKFLOW_CONTROLLER = 'TEMPORAL_WORKFLOW_CONTROLLER';
+
+// ==========================================
+// NEW: Scheduled workflow metadata keys
+// ==========================================
+export const TEMPORAL_SCHEDULED_WORKFLOW = 'TEMPORAL_SCHEDULED_WORKFLOW';
+
+// ==========================================
+// NEW: Workflow Starter metadata keys
+// ==========================================
+export const TEMPORAL_WORKFLOW_STARTER = 'TEMPORAL_WORKFLOW_STARTER';
 
 // ==========================================
 // Default values
@@ -63,90 +72,42 @@ export const ERRORS = {
     ACTIVITY_NOT_FOUND: 'Activity not found',
     WORKFLOW_NOT_FOUND: 'Workflow not found',
     SCHEDULE_CLIENT_NOT_INITIALIZED: 'Temporal schedule client not initialized',
+    WORKFLOW_CONTROLLER_NOT_FOUND: 'Workflow controller not found',
+    INVALID_SCHEDULE_OPTIONS: 'Invalid schedule options',
+    DUPLICATE_WORKFLOW_NAME: 'Duplicate workflow name found',
+    MISSING_SCHEDULE_ID: 'Schedule ID is required',
+    INVALID_CRON_EXPRESSION: 'Invalid cron expression',
 };
 
 // ==========================================
-// Common policy types
+// Common cron expressions
 // ==========================================
-
-/**
- * WorkflowId reuse policy
- * Controls what happens when starting a workflow with an ID that was used before
- */
-export const WorkflowIdReusePolicy = {
-    /**
-     * Allow starting the workflow if the previous run is completed
-     * @default
-     */
-    ALLOW_DUPLICATE: 'ALLOW_DUPLICATE',
-
-    /**
-     * Allow starting the workflow if the previous run failed
-     */
-    ALLOW_DUPLICATE_FAILED_ONLY: 'ALLOW_DUPLICATE_FAILED_ONLY',
-
-    /**
-     * Do not allow reusing the same workflow ID
-     */
-    REJECT_DUPLICATE: 'REJECT_DUPLICATE',
+export const CRON_EXPRESSIONS = {
+    EVERY_MINUTE: '* * * * *',
+    EVERY_5_MINUTES: '*/5 * * * *',
+    EVERY_15_MINUTES: '*/15 * * * *',
+    EVERY_30_MINUTES: '*/30 * * * *',
+    EVERY_HOUR: '0 * * * *',
+    EVERY_6_HOURS: '0 */6 * * *',
+    EVERY_12_HOURS: '0 */12 * * *',
+    DAILY: '0 0 * * *',
+    DAILY_6AM: '0 6 * * *',
+    DAILY_8AM: '0 8 * * *',
+    DAILY_NOON: '0 12 * * *',
+    WEEKLY_MONDAY_9AM: '0 9 * * 1',
+    MONTHLY: '0 0 1 * *',
+    YEARLY: '0 0 1 1 *',
 } as const;
-export type WorkflowIdReusePolicy =
-    (typeof WorkflowIdReusePolicy)[keyof typeof WorkflowIdReusePolicy];
 
-/**
- * WorkflowId conflict policy
- * Controls what happens when starting a workflow with an ID that's already running
- */
-export const WorkflowIdConflictPolicy = {
-    /**
-     * Fail the operation with an error
-     * @default
-     */
-    FAIL: 'FAIL',
+export enum WorkflowIdReusePolicy {
+    ALLOW_DUPLICATE = 0,
+    ALLOW_DUPLICATE_FAILED_ONLY = 1,
+    REJECT_DUPLICATE = 2,
+    TERMINATE_IF_RUNNING = 3,
+}
 
-    /**
-     * Return handle to the existing workflow
-     */
-    USE_EXISTING: 'USE_EXISTING',
-
-    /**
-     * Terminate the existing workflow and start a new one
-     */
-    TERMINATE_EXISTING: 'TERMINATE_EXISTING',
-} as const;
-export type WorkflowIdConflictPolicy =
-    (typeof WorkflowIdConflictPolicy)[keyof typeof WorkflowIdConflictPolicy];
-
-/**
- * Schedule overlap policy
- * Controls what happens when a schedule triggers while a previous run is still active
- */
-export const ScheduleOverlapPolicy = {
-    /**
-     * Allow all overlapping runs
-     * @default
-     */
-    ALLOW_ALL: 'ALLOW_ALL',
-
-    /**
-     * Skip this run if a previous one is still running
-     */
-    SKIP: 'SKIP',
-
-    /**
-     * Buffer one run to execute after current one completes
-     */
-    BUFFER_ONE: 'BUFFER_ONE',
-
-    /**
-     * Buffer all runs to execute in sequence
-     */
-    BUFFER_ALL: 'BUFFER_ALL',
-
-    /**
-     * Cancel any previous run and start a new one
-     */
-    CANCEL_OTHER: 'CANCEL_OTHER',
-} as const;
-export type ScheduleOverlapPolicy =
-    (typeof ScheduleOverlapPolicy)[keyof typeof ScheduleOverlapPolicy];
+export enum WorkflowIdConflictPolicy {
+    REJECT_DUPLICATE = 'REJECT_DUPLICATE',
+    TERMINATE_IF_RUNNING = 'TERMINATE_IF_RUNNING',
+    ALLOW_DUPLICATE = 'ALLOW_DUPLICATE',
+}

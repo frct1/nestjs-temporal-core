@@ -1,13 +1,15 @@
 import { DynamicModule, Module } from '@nestjs/common';
-import { DiscoveryService } from '@nestjs/core';
+import { DiscoveryService, MetadataScanner } from '@nestjs/core';
 import { TemporalClientModule } from './client/temporal-client.module';
 import { TemporalWorkerModule } from './worker/temporal-worker.module';
 import { TemporalOptions, TemporalAsyncOptions } from './interfaces/temporal.interface';
 import { TemporalService } from './temporal.service';
+import { WorkflowDiscoveryService } from './discovery/workflow-discovery.service';
+import { ScheduleManagerService } from './discovery/schedule-manager.service';
 
 /**
- * Unified module for Temporal integration with NestJS
- * Combines client and worker functionality into a single module
+ * Enhanced unified module for Temporal integration with NestJS
+ * Now includes automatic discovery of workflow controllers and scheduled workflows
  */
 @Module({})
 export class TemporalModule {
@@ -32,7 +34,8 @@ export class TemporalModule {
      *         activityClasses: [EmailActivities]
      *       }
      *     })
-     *   ]
+     *   ],
+     *   controllers: [OrderWorkflowController], // Discovered automatically
      * })
      * export class AppModule {}
      * ```
@@ -53,9 +56,11 @@ export class TemporalModule {
                 namespace: options.connection.namespace,
                 taskQueue: options.taskQueue || 'default-task-queue',
                 workflowsPath: options.worker.workflowsPath,
+                workflowBundle: options.worker.workflowBundle,
                 activityClasses: options.worker.activityClasses,
                 autoStart: options.worker.autoStart !== false,
                 allowWorkerFailure: true,
+                workerOptions: options.worker.workerOptions,
             };
 
             imports.push(TemporalWorkerModule.register(workerOptions));
@@ -64,8 +69,17 @@ export class TemporalModule {
         return {
             module: TemporalModule,
             imports,
-            providers: [TemporalService, DiscoveryService],
-            exports: [TemporalService],
+            providers: [
+                // Core services
+                TemporalService,
+
+                // Discovery services (NEW)
+                DiscoveryService,
+                MetadataScanner,
+                WorkflowDiscoveryService,
+                ScheduleManagerService,
+            ],
+            exports: [TemporalService, WorkflowDiscoveryService, ScheduleManagerService],
             global: options.isGlobal,
         };
     }
@@ -96,7 +110,8 @@ export class TemporalModule {
      *       }),
      *       inject: [ConfigService]
      *     })
-     *   ]
+     *   ],
+     *   controllers: [OrderWorkflowController, ReportWorkflowController],
      * })
      * export class AppModule {}
      * ```
@@ -141,9 +156,11 @@ export class TemporalModule {
                                       namespace: temporalOptions.connection.namespace,
                                       taskQueue: temporalOptions.taskQueue || 'default-task-queue',
                                       workflowsPath: temporalOptions.worker.workflowsPath,
+                                      workflowBundle: temporalOptions.worker.workflowBundle,
                                       activityClasses: temporalOptions.worker.activityClasses,
                                       autoStart: temporalOptions.worker.autoStart !== false,
                                       allowWorkerFailure: true,
+                                      workerOptions: temporalOptions.worker.workerOptions,
                                   };
                               },
                               inject: options.inject,
@@ -151,8 +168,17 @@ export class TemporalModule {
                       ]
                     : []),
             ],
-            providers: [TemporalService, DiscoveryService],
-            exports: [TemporalService],
+            providers: [
+                // Core services
+                TemporalService,
+
+                // Discovery services (NEW)
+                DiscoveryService,
+                MetadataScanner,
+                WorkflowDiscoveryService,
+                ScheduleManagerService,
+            ],
+            exports: [TemporalService, WorkflowDiscoveryService, ScheduleManagerService],
             global: options.isGlobal,
         };
     }

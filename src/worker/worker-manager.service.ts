@@ -14,6 +14,7 @@ import { TemporalMetadataAccessor } from './temporal-metadata.accessor';
 
 /**
  * Service responsible for creating and managing Temporal workers
+ * Enhanced to support workflowBundle and advanced worker options
  */
 @Injectable()
 export class WorkerManager implements OnModuleInit, OnModuleDestroy, OnApplicationBootstrap {
@@ -144,6 +145,9 @@ export class WorkerManager implements OnModuleInit, OnModuleDestroy, OnApplicati
             throw new Error(ERRORS.MISSING_TASK_QUEUE);
         }
 
+        // Validate workflow configuration
+        this.validateWorkflowConfiguration();
+
         // Gather activity implementations
         const activities = await this.discoverActivities();
 
@@ -165,17 +169,8 @@ export class WorkerManager implements OnModuleInit, OnModuleDestroy, OnApplicati
         this.logger.debug(`Connecting to Temporal server at ${connectionOptions.address}`);
         this.connection = await NativeConnection.connect(connectionOptions);
 
-        // Create worker options
-        const workerOptions = {
-            taskQueue: this.options.taskQueue,
-            activities,
-            workflowsPath: this.options.workflowsPath,
-            // Apply sensible defaults
-            maxConcurrentActivityTaskExecutions: 100,
-            maxConcurrentWorkflowTaskExecutions: 40,
-            // Enable V8 context reuse for better performance
-            reuseV8Context: true,
-        };
+        // Build worker options
+        const workerOptions = this.buildWorkerOptions(activities);
 
         // Create the worker
         this.worker = await Worker.create({
@@ -187,6 +182,97 @@ export class WorkerManager implements OnModuleInit, OnModuleDestroy, OnApplicati
         this.logger.log(
             `Worker created for queue: ${this.options.taskQueue} in namespace: ${this.options.namespace || DEFAULT_NAMESPACE}`,
         );
+
+        // Log configuration details
+        this.logWorkerConfiguration(workerOptions);
+    }
+
+    /**
+     * Validate workflow configuration
+     */
+    private validateWorkflowConfiguration() {
+        const hasWorkflowsPath = !!this.options.workflowsPath;
+        const hasWorkflowBundle = !!this.options.workflowBundle;
+
+        if (!hasWorkflowsPath && !hasWorkflowBundle) {
+            throw new Error(
+                'Either workflowsPath or workflowBundle must be provided in worker options',
+            );
+        }
+
+        if (hasWorkflowsPath && hasWorkflowBundle) {
+            throw new Error(
+                'Cannot specify both workflowsPath and workflowBundle. Choose one based on your deployment strategy.',
+            );
+        }
+
+        if (hasWorkflowBundle) {
+            this.logger.log('Using pre-bundled workflows (recommended for production)');
+        } else {
+            this.logger.log('Using workflows from filesystem path (recommended for development)');
+        }
+    }
+
+    /**
+     * Build comprehensive worker options from configuration
+     */
+    private buildWorkerOptions(activities: Record<string, (...args: unknown[]) => unknown>) {
+        // Start with base options
+        const baseOptions: any = {
+            taskQueue: this.options.taskQueue,
+            activities,
+        };
+
+        // Add workflow configuration
+        if (this.options.workflowBundle) {
+            baseOptions.workflowBundle = this.options.workflowBundle;
+        } else if (this.options.workflowsPath) {
+            baseOptions.workflowsPath = this.options.workflowsPath;
+        }
+
+        // Apply default worker options
+        const defaultWorkerOptions = {
+            maxConcurrentActivityTaskExecutions: 100,
+            maxConcurrentWorkflowTaskExecutions: 40,
+            reuseV8Context: true,
+        };
+
+        // Merge with user-provided worker options
+        const userWorkerOptions = this.options.workerOptions || {};
+
+        // Combine all options
+        const finalOptions = {
+            ...baseOptions,
+            ...defaultWorkerOptions,
+            ...userWorkerOptions,
+        };
+
+        return finalOptions;
+    }
+
+    /**
+     * Log worker configuration for debugging
+     */
+    private logWorkerConfiguration(workerOptions: any) {
+        const configSummary = {
+            taskQueue: workerOptions.taskQueue,
+            maxConcurrentActivityTaskExecutions: workerOptions.maxConcurrentActivityTaskExecutions,
+            maxConcurrentWorkflowTaskExecutions: workerOptions.maxConcurrentWorkflowTaskExecutions,
+            reuseV8Context: workerOptions.reuseV8Context,
+            workflowSource: workerOptions.workflowBundle ? 'bundle' : 'filesystem',
+            activitiesCount: Object.keys(workerOptions.activities || {}).length,
+        };
+
+        this.logger.debug('Worker configuration summary:', JSON.stringify(configSummary, null, 2));
+
+        // Log additional options if they exist
+        const additionalOptions = Object.keys(workerOptions).filter(
+            (key) => !['taskQueue', 'activities', 'workflowsPath', 'workflowBundle'].includes(key),
+        );
+
+        if (additionalOptions.length > 0) {
+            this.logger.debug(`Additional worker options: ${additionalOptions.join(', ')}`);
+        }
     }
 
     /**
@@ -253,5 +339,19 @@ export class WorkerManager implements OnModuleInit, OnModuleDestroy, OnApplicati
      */
     isWorkerRunning(): boolean {
         return this.isRunning;
+    }
+
+    /**
+     * Get worker configuration summary for monitoring
+     */
+    getWorkerInfo() {
+        return {
+            isRunning: this.isRunning,
+            taskQueue: this.options.taskQueue,
+            namespace: this.options.namespace || DEFAULT_NAMESPACE,
+            hasWorker: !!this.worker,
+            hasConnection: !!this.connection,
+            workflowSource: this.options.workflowBundle ? 'bundle' : 'filesystem',
+        };
     }
 }

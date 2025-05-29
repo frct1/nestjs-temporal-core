@@ -16,11 +16,11 @@ export * from './client/temporal-schedule.service';
 export * from './worker/temporal-worker.module';
 export * from './worker/worker-manager.service';
 
+// Export discovery services
+export * from './discovery';
+
 // Export all decorators
 export * from './decorators';
-
-// Export interface types
-export * from './interfaces';
 
 // Export constants
 export {
@@ -28,10 +28,8 @@ export {
     DEFAULT_NAMESPACE,
     DEFAULT_TASK_QUEUE,
 
-    // Policy types
-    WorkflowIdReusePolicy,
-    WorkflowIdConflictPolicy,
-    ScheduleOverlapPolicy,
+    // Cron expressions
+    CRON_EXPRESSIONS,
 
     // Error constants
     ERRORS,

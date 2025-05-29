@@ -1,6 +1,7 @@
 import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Client, ScheduleClient, ScheduleHandle, ScheduleOverlapPolicy } from '@temporalio/client';
 import { TEMPORAL_CLIENT, ERRORS } from '../constants';
+import { StringValue } from 'ms';
 
 @Injectable()
 export class TemporalScheduleService implements OnModuleInit {
@@ -52,12 +53,70 @@ export class TemporalScheduleService implements OnModuleInit {
      * @param taskQueue Task queue for the workflow
      * @param args Arguments to pass to the workflow
      * @param description Optional description of the schedule
+     * @param timezone Optional timezone for the cron expression
+     * @param overlapPolicy How to handle overlapping executions
      * @returns Handle to the created schedule
      */
     async createCronWorkflow(
         scheduleId: string,
         workflowType: string,
         cronExpression: string,
+        taskQueue: string,
+        args: any[] = [],
+        description?: string,
+        timezone?: string,
+    ): Promise<ScheduleHandle> {
+        this.ensureClientInitialized();
+
+        try {
+            const scheduleSpec: any = {
+                cronExpressions: [cronExpression],
+            };
+
+            // Add timezone if provided
+            if (timezone) {
+                scheduleSpec.timeZone = timezone;
+            }
+
+            const handle = await this.scheduleClient!.create({
+                scheduleId,
+                spec: scheduleSpec,
+                action: {
+                    type: 'startWorkflow',
+                    workflowType,
+                    taskQueue,
+                    args,
+                    workflowId: `${scheduleId}-${Date.now()}`,
+                },
+                memo: description ? { description } : undefined,
+            });
+
+            this.logger.log(
+                `Created cron workflow schedule: ${scheduleId} with expression: ${cronExpression}${timezone ? ` (${timezone})` : ''}`,
+            );
+            return handle;
+        } catch (error) {
+            this.logger.error(`Failed to create schedule '${scheduleId}': ${error.message}`);
+            throw new Error(`Failed to create schedule '${scheduleId}': ${error.message}`);
+        }
+    }
+
+    /**
+     * Create a workflow that runs on an interval schedule
+     *
+     * @param scheduleId Unique ID for the schedule
+     * @param workflowType Type of workflow to run
+     * @param interval Interval expression (e.g. "5m", "1h", "30s")
+     * @param taskQueue Task queue for the workflow
+     * @param args Arguments to pass to the workflow
+     * @param description Optional description of the schedule
+     * @param overlapPolicy How to handle overlapping executions
+     * @returns Handle to the created schedule
+     */
+    async createIntervalWorkflow(
+        scheduleId: string,
+        workflowType: string,
+        interval: StringValue | number,
         taskQueue: string,
         args: any[] = [],
         description?: string,
@@ -68,7 +127,11 @@ export class TemporalScheduleService implements OnModuleInit {
             const handle = await this.scheduleClient!.create({
                 scheduleId,
                 spec: {
-                    cronExpressions: [cronExpression],
+                    intervals: [
+                        {
+                            every: interval,
+                        },
+                    ],
                 },
                 action: {
                     type: 'startWorkflow',
@@ -81,12 +144,14 @@ export class TemporalScheduleService implements OnModuleInit {
             });
 
             this.logger.log(
-                `Created cron workflow schedule: ${scheduleId} with expression: ${cronExpression}`,
+                `Created interval workflow schedule: ${scheduleId} with interval: ${interval}`,
             );
             return handle;
         } catch (error) {
-            this.logger.error(`Failed to create schedule '${scheduleId}': ${error.message}`);
-            throw new Error(`Failed to create schedule '${scheduleId}': ${error.message}`);
+            this.logger.error(
+                `Failed to create interval schedule '${scheduleId}': ${error.message}`,
+            );
+            throw new Error(`Failed to create interval schedule '${scheduleId}': ${error.message}`);
         }
     }
 
@@ -187,6 +252,43 @@ export class TemporalScheduleService implements OnModuleInit {
         } catch (error) {
             this.logger.error(`Failed to list schedules: ${error.message}`);
             throw new Error(`Failed to list schedules: ${error.message}`);
+        }
+    }
+
+    /**
+     * Get detailed information about a specific schedule
+     *
+     * @param scheduleId ID of the schedule to describe
+     * @returns Schedule description
+     */
+    async describeSchedule(scheduleId: string): Promise<any> {
+        this.ensureClientInitialized();
+
+        try {
+            const handle = await this.scheduleClient!.getHandle(scheduleId);
+            return await handle.describe();
+        } catch (error) {
+            this.logger.error(`Failed to describe schedule '${scheduleId}': ${error.message}`);
+            throw new Error(`Failed to describe schedule '${scheduleId}': ${error.message}`);
+        }
+    }
+
+    /**
+     * Update a schedule's configuration
+     *
+     * @param scheduleId ID of the schedule to update
+     * @param updateFn Function to update the schedule
+     */
+    async updateSchedule(scheduleId: string, updateFn: (schedule: any) => any): Promise<void> {
+        this.ensureClientInitialized();
+
+        try {
+            const handle = await this.scheduleClient!.getHandle(scheduleId);
+            await handle.update(updateFn);
+            this.logger.log(`Updated schedule: ${scheduleId}`);
+        } catch (error) {
+            this.logger.error(`Failed to update schedule '${scheduleId}': ${error.message}`);
+            throw new Error(`Failed to update schedule '${scheduleId}': ${error.message}`);
         }
     }
 

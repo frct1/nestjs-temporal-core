@@ -2,61 +2,118 @@
  * Re-export all decorators for easier imports
  */
 
+// ==========================================
 // Activity decorators
+// ==========================================
 export * from './activity.decorator';
 export * from './activity-method.decorator';
 
-// Workflow decorators
+// ==========================================
+// Traditional workflow decorators
+// ==========================================
 export * from './workflow.decorator';
 export * from './workflow-method.decorator';
 export * from './signal-method.decorator';
 export * from './query-method.decorator';
 
+// ==========================================
+// Workflow controller decorators
+// ==========================================
+export * from './workflow-controller.decorator';
+export * from './signal.decorator';
+export * from './query.decorator';
+
+// ==========================================
+// Scheduling decorators
+// ==========================================
+export * from './scheduled.decorator';
+export * from './cron.decorator';
+export * from './interval.decorator';
+
+// ==========================================
+// Parameter decorators
+// ==========================================
+export * from './workflow-param.decorator';
+export * from './workflow-context.decorator';
+
+// ==========================================
+// Service method decorators
+// ==========================================
+export * from './workflow-starter.decorator';
+
 /**
- * Example usage:
+ * Usage examples:
  *
- * Activity definition:
+ * Activity definition (existing pattern):
  * ```typescript
  * import { Activity, ActivityMethod } from 'nestjs-temporal-core';
  *
  * @Activity()
  * export class EmailActivities {
  *   @ActivityMethod()
- *   async sendWelcomeEmail(to: string): Promise<boolean> {
+ *   async sendEmail(to: string): Promise<boolean> {
  *     // Send email implementation
  *     return true;
  *   }
  * }
  * ```
  *
- * Workflow definition:
+ * Workflow Controller (NEW NestJS-like pattern):
  * ```typescript
- * import { Workflow, WorkflowMethod, SignalMethod, QueryMethod } from 'nestjs-temporal-core';
+ * import {
+ *   WorkflowController,
+ *   WorkflowMethod,
+ *   Signal,
+ *   Query,
+ *   Cron,
+ *   WorkflowParam
+ * } from 'nestjs-temporal-core';
  *
- * @Workflow({
- *   name: 'UserOnboardingWorkflow',
- *   taskQueue: 'user-onboarding'
- * })
- * export class UserOnboardingWorkflow {
+ * @WorkflowController({ taskQueue: 'orders' })
+ * export class OrderController {
  *   private status = 'pending';
- *   private userData: any = {};
  *
  *   @WorkflowMethod()
- *   async onboardUser(userId: string): Promise<string> {
- *     this.status = 'started';
+ *   async processOrder(@WorkflowParam() orderId: string): Promise<string> {
+ *     this.status = 'processing';
  *     // Workflow implementation
  *     this.status = 'completed';
- *     return 'completed';
+ *     return this.status;
  *   }
  *
- *   @SignalMethod()
- *   async updateUserData(data: any): void {
- *     this.userData = { ...this.userData, ...data };
+ *   @Signal('addItem')
+ *   async addItem(@WorkflowParam() item: any): void {
+ *     // Handle signal
  *   }
  *
- *   @QueryMethod()
+ *   @Query()
  *   getStatus(): string {
  *     return this.status;
+ *   }
+ *
+ *   @Cron('0 8 * * *', {
+ *     scheduleId: 'daily-cleanup',
+ *     description: 'Daily cleanup'
+ *   })
+ *   @WorkflowMethod()
+ *   async dailyCleanup(): Promise<void> {
+ *     // Scheduled workflow
+ *   }
+ * }
+ * ```
+ *
+ * Service with Workflow Starter:
+ * ```typescript
+ * import { WorkflowStarter } from 'nestjs-temporal-core';
+ *
+ * @Injectable()
+ * export class OrderService {
+ *   @WorkflowStarter({
+ *     workflowType: 'processOrder',
+ *     taskQueue: 'orders'
+ *   })
+ *   async processOrder(orderId: string): Promise<WorkflowHandle> {
+ *     // Implementation auto-generated
  *   }
  * }
  * ```

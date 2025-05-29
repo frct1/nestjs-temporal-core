@@ -1,4 +1,5 @@
 import { ModuleMetadata, Type } from '@nestjs/common';
+import { WorkerCreateOptions } from './worker.interface';
 
 /**
  * Unified configuration options for Temporal integration
@@ -52,9 +53,20 @@ export interface TemporalOptions {
      */
     worker?: {
         /**
-         * Path to workflow modules
+         * Path to workflow modules (for development)
+         * @example "./dist/workflows"
+         *
+         * Note: Either workflowsPath OR workflowBundle should be provided, not both
          */
-        workflowsPath: string;
+        workflowsPath?: string;
+
+        /**
+         * Pre-bundled workflow code (for production)
+         * This is the preferred approach for production deployments
+         *
+         * Note: Either workflowsPath OR workflowBundle should be provided, not both
+         */
+        workflowBundle?: any;
 
         /**
          * Activity classes to register
@@ -66,6 +78,12 @@ export interface TemporalOptions {
          * @default true
          */
         autoStart?: boolean;
+
+        /**
+         * Advanced worker configuration options
+         * These options are passed directly to Temporal's Worker.create()
+         */
+        workerOptions?: WorkerCreateOptions;
     };
 
     /**

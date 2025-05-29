@@ -20,6 +20,12 @@ export * from './activity.interface';
 // Unified Temporal interfaces
 export * from './temporal.interface';
 
+// Scheduling interfaces
+export * from './scheduling.interface';
+
+// Workflow controller interfaces
+export * from './workflow-controller.interface';
+
 // Re-export key types from Temporal SDK for convenience
 export { RetryPolicy, Duration, SearchAttributes } from '@temporalio/common';
 
