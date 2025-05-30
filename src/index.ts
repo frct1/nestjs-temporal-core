@@ -1,36 +1,63 @@
+import 'reflect-metadata';
 /**
- * Main entry point for nestjs-temporal-core
- * This file re-exports all public APIs from the package
+ * NestJS Temporal Core - Complete Temporal.io Integration for NestJS
  */
 
-// Export unified Temporal module
-export * from './temporal.module';
-export * from './temporal.service';
+// ==========================================
+// Main Module and Service
+// ==========================================
+export { TemporalModule } from './temporal.module';
+export { TemporalService } from './temporal.service';
 
-// Export client module components
-export * from './client/temporal-client.module';
-export * from './client/temporal-client.service';
-export * from './client/temporal-schedule.service';
+// ==========================================
+// Client Components
+// ==========================================
+export { TemporalClientModule } from './client';
+export { TemporalClientService } from './client';
+export { TemporalScheduleService } from './client';
 
-// Export worker module components
-export * from './worker/temporal-worker.module';
-export * from './worker/worker-manager.service';
+// ==========================================
+// Worker Components
+// ==========================================
+export { TemporalWorkerModule } from './worker';
+export { WorkerManager } from './worker';
+export { TemporalMetadataAccessor } from './worker';
 
-// Export discovery services
-export * from './discovery';
+// ==========================================
+// Discovery Services
+// ==========================================
+export { WorkflowDiscoveryService } from './discovery';
+export { ScheduleManagerService } from './discovery';
 
-// Export all decorators
+// ==========================================
+// All Decorators
+// ==========================================
 export * from './decorators';
 
-// Export constants
+// ==========================================
+// All Interfaces and Types
+// ==========================================
+export * from './interfaces';
+
+// ==========================================
+// Constants
+// ==========================================
 export {
-    // Default values
     DEFAULT_NAMESPACE,
     DEFAULT_TASK_QUEUE,
-
-    // Cron expressions
     CRON_EXPRESSIONS,
-
-    // Error constants
+    INTERVAL_EXPRESSIONS,
+    WORKER_PRESETS,
+    RETRY_POLICIES,
+    TIMEOUTS,
     ERRORS,
 } from './constants';
+
+// ==========================================
+// Re-export Temporal SDK Types
+// ==========================================
+export type { RetryPolicy, Duration, SearchAttributes } from '@temporalio/common';
+
+export type { ScheduleOverlapPolicy, WorkflowHandle, Client } from '@temporalio/client';
+
+export type { Worker } from '@temporalio/worker';

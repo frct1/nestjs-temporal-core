@@ -31,7 +31,7 @@ import { createParamDecorator, ExecutionContext } from '@nestjs/common';
  * ```
  */
 export const WorkflowParam = createParamDecorator(
-    (index: number | undefined, ctx: ExecutionContext) => {
+    (index: number | undefined, _ctx: ExecutionContext) => {
         // This is a placeholder implementation
         // The actual implementation would need to be integrated
         // with the workflow execution context
@@ -49,3 +49,44 @@ export const WorkflowParam = createParamDecorator(
         };
     },
 );
+
+/**
+ * Extracts workflow execution context
+ * Provides access to workflow metadata
+ *
+ * @example
+ * ```typescript
+ * @WorkflowController({ taskQueue: 'orders' })
+ * export class OrderController {
+ *   @WorkflowMethod()
+ *   async processOrder(
+ *     @WorkflowParam() orderId: string,
+ *     @WorkflowContext() context: WorkflowExecutionContext
+ *   ) {
+ *     console.log('Workflow ID:', context.workflowId);
+ *     console.log('Task Queue:', context.taskQueue);
+ *   }
+ *
+ *   @Query()
+ *   getWorkflowInfo(@WorkflowContext() context: WorkflowExecutionContext) {
+ *     return {
+ *       id: context.workflowId,
+ *       type: context.workflowType
+ *     };
+ *   }
+ * }
+ * ```
+ */
+export const WorkflowContext = (): ParameterDecorator => {
+    return (target: any, propertyKey: string | symbol | undefined, parameterIndex: number) => {
+        const existingParams = propertyKey
+            ? Reflect.getMetadata('workflow:params', target, propertyKey) || []
+            : [];
+        existingParams[parameterIndex] = {
+            type: 'context',
+        };
+        if (propertyKey !== undefined) {
+            Reflect.defineMetadata('workflow:params', existingParams, target, propertyKey);
+        }
+    };
+};

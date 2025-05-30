@@ -1,25 +1,6 @@
 import { SetMetadata } from '@nestjs/common';
 import { TEMPORAL_WORKFLOW_STARTER } from '../constants';
-
-/**
- * Workflow starter options
- */
-export interface WorkflowStarterOptions {
-    /**
-     * Workflow type to start
-     */
-    workflowType: string;
-
-    /**
-     * Task queue for the workflow
-     */
-    taskQueue: string;
-
-    /**
-     * Optional workflow ID generator
-     */
-    workflowId?: string | ((args: any[]) => string);
-}
+import { WorkflowStarterOptions } from '../interfaces';
 
 /**
  * Marks a service method as a workflow starter

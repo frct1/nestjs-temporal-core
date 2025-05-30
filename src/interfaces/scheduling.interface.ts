@@ -1,13 +1,4 @@
 /**
- * Scheduling interfaces
- * Contains all interfaces related to scheduled workflows
- */
-
-// ==========================================
-// Scheduled Workflow Options
-// ==========================================
-
-/**
  * Scheduled workflow configuration options
  */
 export interface ScheduledOptions {

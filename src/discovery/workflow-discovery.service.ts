@@ -8,71 +8,30 @@ import {
     TEMPORAL_SIGNAL_METHOD,
     TEMPORAL_QUERY_METHOD,
     TEMPORAL_WORKFLOW_METHOD_OPTIONS,
+    LOG_CATEGORIES,
 } from '../constants';
+import {
+    WorkflowControllerInfo,
+    WorkflowMethodInfo,
+    SignalMethodInfo,
+    QueryMethodInfo,
+    ScheduledMethodInfo,
+    DiscoveryStats,
+    WorkflowMethodHandler,
+    SignalMethodHandler,
+    QueryMethodHandler,
+} from '../interfaces';
 
 /**
- * Information about discovered workflow controller
- */
-export interface WorkflowControllerInfo {
-    instance: any;
-    metatype: any;
-    taskQueue?: string;
-    methods: WorkflowMethodInfo[];
-    signals: SignalMethodInfo[];
-    queries: QueryMethodInfo[];
-    scheduledMethods: ScheduledMethodInfo[];
-}
-
-/**
- * Information about discovered workflow method
- */
-export interface WorkflowMethodInfo {
-    methodName: string;
-    workflowName: string;
-    options: any;
-    handler: (...args: any[]) => any;
-}
-
-/**
- * Information about discovered signal method
- */
-export interface SignalMethodInfo {
-    methodName: string;
-    signalName: string;
-    options: any;
-    handler: (...args: any[]) => any;
-}
-
-/**
- * Information about discovered query method
- */
-export interface QueryMethodInfo {
-    methodName: string;
-    queryName: string;
-    options: any;
-    handler: (...args: any[]) => any;
-}
-
-/**
- * Information about discovered scheduled method
- */
-export interface ScheduledMethodInfo {
-    methodName: string;
-    workflowName: string;
-    scheduleOptions: any;
-    workflowOptions: any;
-    handler: (...args: any[]) => any;
-    controllerInfo: WorkflowControllerInfo;
-}
-
-/**
- * Service for discovering workflow controllers and their methods
+ * Enhanced service for discovering workflow controllers and their methods
+ * Provides comprehensive discovery and management of Temporal workflow components
  */
 @Injectable()
 export class WorkflowDiscoveryService implements OnModuleInit {
-    private readonly logger = new Logger(WorkflowDiscoveryService.name);
-    private workflowControllers: WorkflowControllerInfo[] = [];
-    private scheduledWorkflows: ScheduledMethodInfo[] = [];
+    private readonly logger = new Logger(LOG_CATEGORIES.DISCOVERY);
+    private readonly workflowControllers = new Map<string, WorkflowControllerInfo>();
+    private readonly scheduledWorkflows = new Map<string, ScheduledMethodInfo>();
+    private readonly workflowMethods = new Map<string, WorkflowMethodInfo>();
 
     constructor(
         private readonly discoveryService: DiscoveryService,
@@ -85,34 +44,37 @@ export class WorkflowDiscoveryService implements OnModuleInit {
     }
 
     /**
-     * Discover all workflow controllers
+     * Discover all workflow controllers and their components
      */
-    private async discoverWorkflowControllers() {
-        const providers = this.discoveryService.getProviders();
-        const controllers = this.discoveryService.getControllers();
-
-        // Check both providers and controllers
-        const allWrappers = [...providers, ...controllers];
+    private async discoverWorkflowControllers(): Promise<void> {
+        const allWrappers = [
+            ...this.discoveryService.getProviders(),
+            ...this.discoveryService.getControllers(),
+        ];
 
         for (const wrapper of allWrappers) {
-            await this.processWrapper(wrapper);
+            const controllerInfo = await this.processWrapper(wrapper);
+            if (controllerInfo) {
+                this.workflowControllers.set(controllerInfo.metatype.name, controllerInfo);
+                this.indexWorkflowMethods(controllerInfo);
+                this.indexScheduledWorkflows(controllerInfo);
+            }
         }
     }
 
     /**
      * Process a single wrapper to check if it's a workflow controller
      */
-    private async processWrapper(wrapper: InstanceWrapper) {
+    private async processWrapper(wrapper: InstanceWrapper): Promise<WorkflowControllerInfo | null> {
         const { instance, metatype } = wrapper;
 
         if (!instance || !metatype) {
-            return;
+            return null;
         }
 
-        // Check if this is a workflow controller
         const controllerOptions = Reflect.getMetadata(TEMPORAL_WORKFLOW_CONTROLLER, metatype);
         if (!controllerOptions) {
-            return;
+            return null;
         }
 
         this.logger.debug(`Discovered workflow controller: ${metatype.name}`);
@@ -127,160 +89,301 @@ export class WorkflowDiscoveryService implements OnModuleInit {
             scheduledMethods: [],
         };
 
-        // Discover methods
         await this.discoverControllerMethods(controllerInfo);
-
-        this.workflowControllers.push(controllerInfo);
+        return controllerInfo;
     }
 
     /**
-     * Discover methods within a workflow controller
+     * Discover all methods within a workflow controller
      */
-    private async discoverControllerMethods(controllerInfo: WorkflowControllerInfo) {
+    private async discoverControllerMethods(controllerInfo: WorkflowControllerInfo): Promise<void> {
         const { instance } = controllerInfo;
+        const prototype = Object.getPrototypeOf(instance);
 
-        const methodNames = this.metadataScanner.scanFromPrototype(
-            instance,
-            Object.getPrototypeOf(instance),
-            (methodName) => methodName,
-        );
+        const methodNames = this.metadataScanner
+            .scanFromPrototype(instance, prototype, (methodName) =>
+                methodName !== 'constructor' ? methodName : null,
+            )
+            .filter((methodName): methodName is string => Boolean(methodName));
 
         for (const methodName of methodNames) {
-            const method = instance[methodName];
+            const method = prototype[methodName];
             if (!method || typeof method !== 'function') {
                 continue;
             }
 
-            // Check for workflow methods
-            if (Reflect.getMetadata(TEMPORAL_WORKFLOW_METHOD, method)) {
-                const options = Reflect.getMetadata(TEMPORAL_WORKFLOW_METHOD_OPTIONS, method) || {};
-                const methodInfo: WorkflowMethodInfo = {
-                    methodName,
-                    workflowName: options.name || methodName,
-                    options,
-                    handler: method.bind(instance),
-                };
-                controllerInfo.methods.push(methodInfo);
-
-                // Check if this method is also scheduled
-                if (Reflect.getMetadata(TEMPORAL_SCHEDULED_WORKFLOW, method)) {
-                    const scheduleOptions = Reflect.getMetadata(
-                        TEMPORAL_SCHEDULED_WORKFLOW,
-                        method,
-                    );
-                    const scheduledInfo: ScheduledMethodInfo = {
-                        methodName,
-                        workflowName: options.name || methodName,
-                        scheduleOptions,
-                        workflowOptions: options,
-                        handler: method.bind(instance),
-                        controllerInfo,
-                    };
-                    controllerInfo.scheduledMethods.push(scheduledInfo);
-                    this.scheduledWorkflows.push(scheduledInfo);
-                }
-            }
-
-            // Check for signal methods
-            if (Reflect.getMetadata(TEMPORAL_SIGNAL_METHOD, method)) {
-                const options = Reflect.getMetadata(TEMPORAL_SIGNAL_METHOD, method) || {};
-                const signalInfo: SignalMethodInfo = {
-                    methodName,
-                    signalName: options.name || methodName,
-                    options,
-                    handler: method.bind(instance),
-                };
-                controllerInfo.signals.push(signalInfo);
-            }
-
-            // Check for query methods
-            if (Reflect.getMetadata(TEMPORAL_QUERY_METHOD, method)) {
-                const options = Reflect.getMetadata(TEMPORAL_QUERY_METHOD, method) || {};
-                const queryInfo: QueryMethodInfo = {
-                    methodName,
-                    queryName: options.name || methodName,
-                    options,
-                    handler: method.bind(instance),
-                };
-                controllerInfo.queries.push(queryInfo);
-            }
+            this.processMethod(controllerInfo, methodName, method);
         }
     }
 
     /**
-     * Log discovery results
+     * Process individual method and categorize it
      */
-    private logDiscoveryResults() {
-        const controllerCount = this.workflowControllers.length;
-        const methodCount = this.workflowControllers.reduce(
+    private processMethod(
+        controllerInfo: WorkflowControllerInfo,
+        methodName: string,
+        method: WorkflowMethodHandler,
+    ): void {
+        const boundMethod = method.bind(controllerInfo.instance);
+
+        // Check for workflow methods
+        if (Reflect.getMetadata(TEMPORAL_WORKFLOW_METHOD, method)) {
+            const methodInfo = this.createWorkflowMethodInfo(methodName, method, boundMethod);
+            controllerInfo.methods.push(methodInfo);
+
+            // Check if this method is also scheduled
+            const scheduleOptions = Reflect.getMetadata(TEMPORAL_SCHEDULED_WORKFLOW, method);
+            if (scheduleOptions) {
+                const scheduledInfo = this.createScheduledMethodInfo(
+                    methodInfo,
+                    scheduleOptions,
+                    controllerInfo,
+                );
+                controllerInfo.scheduledMethods.push(scheduledInfo);
+            }
+        }
+
+        // Check for signal methods
+        if (Reflect.getMetadata(TEMPORAL_SIGNAL_METHOD, method)) {
+            const signalInfo = this.createSignalMethodInfo(methodName, method, boundMethod);
+            controllerInfo.signals.push(signalInfo);
+        }
+
+        // Check for query methods
+        if (Reflect.getMetadata(TEMPORAL_QUERY_METHOD, method)) {
+            const queryInfo = this.createQueryMethodInfo(methodName, method, boundMethod);
+            controllerInfo.queries.push(queryInfo);
+        }
+    }
+
+    /**
+     * Create workflow method info object
+     */
+    private createWorkflowMethodInfo(
+        methodName: string,
+        method: WorkflowMethodHandler,
+        boundMethod: WorkflowMethodHandler,
+    ): WorkflowMethodInfo {
+        const options = Reflect.getMetadata(TEMPORAL_WORKFLOW_METHOD_OPTIONS, method) || {};
+        return {
+            methodName,
+            workflowName: options.name || methodName,
+            options,
+            handler: boundMethod,
+        };
+    }
+
+    /**
+     * Create scheduled method info object
+     */
+    private createScheduledMethodInfo(
+        methodInfo: WorkflowMethodInfo,
+        scheduleOptions: any,
+        controllerInfo: WorkflowControllerInfo,
+    ): ScheduledMethodInfo {
+        return {
+            methodName: methodInfo.methodName,
+            workflowName: methodInfo.workflowName,
+            scheduleOptions,
+            workflowOptions: methodInfo.options,
+            handler: methodInfo.handler,
+            controllerInfo,
+        };
+    }
+
+    /**
+     * Create signal method info object
+     */
+    private createSignalMethodInfo(
+        methodName: string,
+        method: SignalMethodHandler,
+        boundMethod: SignalMethodHandler,
+    ): SignalMethodInfo {
+        const options = Reflect.getMetadata(TEMPORAL_SIGNAL_METHOD, method) || {};
+        return {
+            methodName,
+            signalName: options.name || methodName,
+            options,
+            handler: boundMethod,
+        };
+    }
+
+    /**
+     * Create query method info object
+     */
+    private createQueryMethodInfo(
+        methodName: string,
+        method: QueryMethodHandler,
+        boundMethod: QueryMethodHandler,
+    ): QueryMethodInfo {
+        const options = Reflect.getMetadata(TEMPORAL_QUERY_METHOD, method) || {};
+        return {
+            methodName,
+            queryName: options.name || methodName,
+            options,
+            handler: boundMethod,
+        };
+    }
+
+    /**
+     * Index workflow methods for fast lookup
+     */
+    private indexWorkflowMethods(controllerInfo: WorkflowControllerInfo): void {
+        for (const method of controllerInfo.methods) {
+            this.workflowMethods.set(method.workflowName, method);
+        }
+    }
+
+    /**
+     * Index scheduled workflows for fast lookup
+     */
+    private indexScheduledWorkflows(controllerInfo: WorkflowControllerInfo): void {
+        for (const scheduled of controllerInfo.scheduledMethods) {
+            this.scheduledWorkflows.set(scheduled.scheduleOptions.scheduleId, scheduled);
+        }
+    }
+
+    /**
+     * Log comprehensive discovery results
+     */
+    private logDiscoveryResults(): void {
+        const stats = this.getDiscoveryStats();
+
+        this.logger.log(
+            `Discovered ${stats.controllers} controllers with ${stats.methods} workflow methods`,
+        );
+        this.logger.log(
+            `Found ${stats.scheduled} scheduled workflows, ${stats.signals} signals, ${stats.queries} queries`,
+        );
+
+        // Debug logging for each controller
+        if (this.logger.localInstance) {
+            this.workflowControllers.forEach((controller) => {
+                this.logControllerDetails(controller);
+            });
+        }
+    }
+
+    /**
+     * Log details for a specific controller
+     */
+    private logControllerDetails(controller: WorkflowControllerInfo): void {
+        this.logger.debug(
+            `Controller: ${controller.metatype.name} (taskQueue: ${controller.taskQueue || 'none'})`,
+        );
+
+        controller.methods.forEach((method) => {
+            this.logger.debug(`  - Workflow: ${method.workflowName} (${method.methodName})`);
+        });
+
+        controller.scheduledMethods.forEach((scheduled) => {
+            this.logger.debug(
+                `  - Scheduled: ${scheduled.scheduleOptions.scheduleId} -> ${scheduled.workflowName}`,
+            );
+        });
+
+        controller.signals.forEach((signal) => {
+            this.logger.debug(`  - Signal: ${signal.signalName} (${signal.methodName})`);
+        });
+
+        controller.queries.forEach((query) => {
+            this.logger.debug(`  - Query: ${query.queryName} (${query.methodName})`);
+        });
+    }
+
+    /**
+     * Get discovery statistics
+     */
+    private getDiscoveryStats(): DiscoveryStats {
+        const controllers = this.workflowControllers.size;
+        const methods = Array.from(this.workflowControllers.values()).reduce(
             (sum, controller) => sum + controller.methods.length,
             0,
         );
-        const scheduledCount = this.scheduledWorkflows.length;
-
-        this.logger.log(
-            `Discovered ${controllerCount} workflow controllers with ${methodCount} methods`,
+        const scheduled = this.scheduledWorkflows.size;
+        const signals = Array.from(this.workflowControllers.values()).reduce(
+            (sum, controller) => sum + controller.signals.length,
+            0,
         );
-        this.logger.log(`Found ${scheduledCount} scheduled workflows`);
+        const queries = Array.from(this.workflowControllers.values()).reduce(
+            (sum, controller) => sum + controller.queries.length,
+            0,
+        );
 
-        // Debug logging
-        for (const controller of this.workflowControllers) {
-            this.logger.debug(`Controller: ${controller.metatype.name}`);
-            for (const method of controller.methods) {
-                this.logger.debug(`  - Workflow: ${method.workflowName} (${method.methodName})`);
-            }
-            for (const scheduled of controller.scheduledMethods) {
-                this.logger.debug(
-                    `  - Scheduled: ${scheduled.scheduleOptions.scheduleId} -> ${scheduled.workflowName}`,
-                );
-            }
-        }
+        return { controllers, methods, scheduled, signals, queries };
     }
+
+    // ==========================================
+    // Public API Methods
+    // ==========================================
 
     /**
      * Get all discovered workflow controllers
      */
     getWorkflowControllers(): WorkflowControllerInfo[] {
-        return this.workflowControllers;
+        return Array.from(this.workflowControllers.values());
     }
 
     /**
      * Get all discovered scheduled workflows
      */
     getScheduledWorkflows(): ScheduledMethodInfo[] {
-        return this.scheduledWorkflows;
+        return Array.from(this.scheduledWorkflows.values());
     }
 
     /**
      * Get workflow controller by name
      */
     getWorkflowController(name: string): WorkflowControllerInfo | undefined {
-        return this.workflowControllers.find((controller) => controller.metatype.name === name);
+        return this.workflowControllers.get(name);
     }
 
     /**
      * Get workflow method by workflow name
      */
     getWorkflowMethod(workflowName: string): WorkflowMethodInfo | undefined {
-        for (const controller of this.workflowControllers) {
-            const method = controller.methods.find((m) => m.workflowName === workflowName);
-            if (method) {
-                return method;
-            }
-        }
-        return undefined;
+        return this.workflowMethods.get(workflowName);
+    }
+
+    /**
+     * Get scheduled workflow by schedule ID
+     */
+    getScheduledWorkflow(scheduleId: string): ScheduledMethodInfo | undefined {
+        return this.scheduledWorkflows.get(scheduleId);
     }
 
     /**
      * Get all workflow names
      */
     getWorkflowNames(): string[] {
-        const names: string[] = [];
-        for (const controller of this.workflowControllers) {
-            for (const method of controller.methods) {
-                names.push(method.workflowName);
-            }
-        }
-        return names;
+        return Array.from(this.workflowMethods.keys());
+    }
+
+    /**
+     * Get all schedule IDs
+     */
+    getScheduleIds(): string[] {
+        return Array.from(this.scheduledWorkflows.keys());
+    }
+
+    /**
+     * Check if a workflow exists
+     */
+    hasWorkflow(workflowName: string): boolean {
+        return this.workflowMethods.has(workflowName);
+    }
+
+    /**
+     * Check if a schedule exists
+     */
+    hasSchedule(scheduleId: string): boolean {
+        return this.scheduledWorkflows.has(scheduleId);
+    }
+
+    /**
+     * Get discovery statistics
+     */
+    getStats(): DiscoveryStats {
+        return this.getDiscoveryStats();
     }
 }
