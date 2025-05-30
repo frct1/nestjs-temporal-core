@@ -1,17 +1,17 @@
 import { DynamicModule, Module, Provider, Type } from '@nestjs/common';
 import { DiscoveryService } from '@nestjs/core';
 import { TEMPORAL_WORKER_MODULE_OPTIONS, ERRORS } from '../constants';
+import { TemporalMetadataAccessor } from './temporal-metadata.accessor';
+import { WorkerManager } from './worker-manager.service';
 import {
     TemporalWorkerAsyncOptions,
     TemporalWorkerOptions,
     TemporalWorkerOptionsFactory,
-} from '../interfaces';
-import { TemporalMetadataAccessor } from './temporal-metadata.accessor';
-import { WorkerManager } from './worker-manager.service';
+} from 'src/interfaces';
 
 /**
  * NestJS module for Temporal worker integration
- * Provides worker management for Temporal activities and workflows
+ * Provides comprehensive worker management for Temporal activities and workflows
  */
 @Module({})
 export class TemporalWorkerModule {
@@ -30,7 +30,7 @@ export class TemporalWorkerModule {
      *       namespace: 'default',
      *       taskQueue: 'my-task-queue',
      *       workflowsPath: './dist/workflows',
-     *       activityClasses: [EmailActivities]
+     *       activityClasses: [EmailActivities, PaymentActivities]
      *     })
      *   ]
      * })
@@ -38,8 +38,6 @@ export class TemporalWorkerModule {
      * ```
      */
     static register(options: TemporalWorkerOptions): DynamicModule {
-        const activityProviders = this.createActivityProviders(options.activityClasses || []);
-
         return {
             module: TemporalWorkerModule,
             global: true,
@@ -48,7 +46,7 @@ export class TemporalWorkerModule {
                     provide: TEMPORAL_WORKER_MODULE_OPTIONS,
                     useValue: options,
                 },
-                ...activityProviders,
+                ...this.createActivityProviders(options.activityClasses || []),
                 TemporalMetadataAccessor,
                 DiscoveryService,
                 WorkerManager,
@@ -77,7 +75,7 @@ export class TemporalWorkerModule {
      *         namespace: configService.get('TEMPORAL_NAMESPACE'),
      *         taskQueue: configService.get('TEMPORAL_TASK_QUEUE'),
      *         workflowsPath: './dist/workflows',
-     *         activityClasses: [EmailActivities]
+     *         activityClasses: [EmailActivities, PaymentActivities]
      *       }),
      *       inject: [ConfigService]
      *     })
@@ -102,19 +100,17 @@ export class TemporalWorkerModule {
     }
 
     /**
-     * Create providers for activity classes
-     * @private
+     * Create providers for activity classes with proper DI setup
      */
     private static createActivityProviders(activityClasses: Array<Type<any>>): Provider[] {
-        return activityClasses.map((activity) => ({
-            provide: activity,
-            useClass: activity,
+        return activityClasses.map((ActivityClass) => ({
+            provide: ActivityClass,
+            useClass: ActivityClass,
         }));
     }
 
     /**
      * Create providers for async module configuration
-     * @private
      */
     private static createAsyncProviders(options: TemporalWorkerAsyncOptions): Provider[] {
         if (options.useFactory) {
@@ -132,7 +128,7 @@ export class TemporalWorkerModule {
                 {
                     provide: TEMPORAL_WORKER_MODULE_OPTIONS,
                     useFactory: async (optionsFactory: TemporalWorkerOptionsFactory) =>
-                        await optionsFactory.createWorkerOptions(),
+                        optionsFactory.createWorkerOptions(),
                     inject: [options.useClass],
                 },
                 {
@@ -147,7 +143,7 @@ export class TemporalWorkerModule {
                 {
                     provide: TEMPORAL_WORKER_MODULE_OPTIONS,
                     useFactory: async (optionsFactory: TemporalWorkerOptionsFactory) =>
-                        await optionsFactory.createWorkerOptions(),
+                        optionsFactory.createWorkerOptions(),
                     inject: [options.useExisting],
                 },
             ];

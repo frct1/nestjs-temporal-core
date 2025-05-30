@@ -1,20 +1,18 @@
 import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Client, WorkflowClient, WorkflowHandle } from '@temporalio/client';
 import { TEMPORAL_CLIENT, ERRORS } from '../constants';
-import { StartWorkflowOptions } from '../interfaces';
+import { StartWorkflowOptions } from 'src/interfaces';
 
 @Injectable()
 export class TemporalClientService implements OnModuleInit {
     private readonly logger = new Logger(TemporalClientService.name);
-    private workflowClient: WorkflowClient | null = null;
+    private readonly workflowClient: WorkflowClient | null;
 
     constructor(
         @Inject(TEMPORAL_CLIENT)
         private readonly client: Client | null,
     ) {
-        if (this.client) {
-            this.workflowClient = this.client.workflow;
-        }
+        this.workflowClient = this.client?.workflow || null;
     }
 
     async onModuleInit() {
@@ -27,7 +25,6 @@ export class TemporalClientService implements OnModuleInit {
 
     /**
      * Get the Temporal workflow client instance
-     * @returns Workflow client or null if not initialized
      */
     getWorkflowClient(): WorkflowClient | null {
         return this.workflowClient;
@@ -35,29 +32,13 @@ export class TemporalClientService implements OnModuleInit {
 
     /**
      * Get the raw Temporal client instance
-     * @returns Raw client or null if not initialized
      */
     getRawClient(): Client | null {
         return this.client;
     }
 
     /**
-     * Ensure client is initialized before performing operations
-     * @private
-     */
-    private ensureClientInitialized() {
-        if (!this.workflowClient) {
-            throw new Error(ERRORS.CLIENT_NOT_INITIALIZED);
-        }
-    }
-
-    /**
-     * Start a workflow execution with simplified options
-     *
-     * @param workflowType Type of workflow to start
-     * @param args Arguments to pass to the workflow
-     * @param options Workflow configuration options
-     * @returns Object containing workflow result promise, ID, and handle
+     * Start a workflow execution with enhanced options
      */
     async startWorkflow<T, A extends any[]>(
         workflowType: string,
@@ -73,13 +54,12 @@ export class TemporalClientService implements OnModuleInit {
 
         const {
             taskQueue,
-            workflowId = `${workflowType}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            workflowId = this.generateWorkflowId(workflowType),
             signal,
             ...restOptions
         } = options;
 
         try {
-            // Create workflow options in Temporal SDK format
             const startOptions: any = {
                 taskQueue,
                 workflowId,
@@ -91,10 +71,12 @@ export class TemporalClientService implements OnModuleInit {
                 ...startOptions,
             });
 
-            // If a signal is provided, send it to the newly created workflow
+            // Send initial signal if provided
             if (signal) {
                 await handle.signal(signal.name, ...(signal.args || []));
             }
+
+            this.logger.debug(`Started workflow: ${workflowType} (${workflowId})`);
 
             return {
                 result: handle.result() as Promise<T>,
@@ -103,17 +85,14 @@ export class TemporalClientService implements OnModuleInit {
                 handle,
             };
         } catch (error) {
-            this.logger.error(`Failed to start workflow '${workflowType}': ${error.message}`);
-            throw new Error(`Failed to start workflow '${workflowType}': ${error.message}`);
+            const errorMsg = `Failed to start workflow '${workflowType}': ${error.message}`;
+            this.logger.error(errorMsg);
+            throw new Error(errorMsg);
         }
     }
 
     /**
      * Send a signal to a running workflow
-     *
-     * @param workflowId ID of the workflow to signal
-     * @param signalName Name of the signal to send
-     * @param args Arguments to pass with the signal
      */
     async signalWorkflow(workflowId: string, signalName: string, args: any[] = []): Promise<void> {
         this.ensureClientInitialized();
@@ -121,45 +100,34 @@ export class TemporalClientService implements OnModuleInit {
         try {
             const handle = await this.workflowClient!.getHandle(workflowId);
             await handle.signal(signalName, ...args);
+            this.logger.debug(`Sent signal '${signalName}' to workflow ${workflowId}`);
         } catch (error) {
-            this.logger.error(
-                `Failed to send signal '${signalName}' to workflow ${workflowId}: ${error.message}`,
-            );
-            throw new Error(
-                `Failed to send signal '${signalName}' to workflow ${workflowId}: ${error.message}`,
-            );
+            const errorMsg = `Failed to send signal '${signalName}' to workflow ${workflowId}: ${error.message}`;
+            this.logger.error(errorMsg);
+            throw new Error(errorMsg);
         }
     }
 
     /**
      * Query a workflow's state
-     *
-     * @param workflowId ID of the workflow to query
-     * @param queryName Name of the query to execute
-     * @param args Arguments to pass to the query
-     * @returns Query result
      */
     async queryWorkflow<T>(workflowId: string, queryName: string, args: any[] = []): Promise<T> {
         this.ensureClientInitialized();
 
         try {
             const handle = await this.workflowClient!.getHandle(workflowId);
-            return await handle.query(queryName, ...args);
+            const result = await handle.query(queryName, ...args);
+            this.logger.debug(`Queried '${queryName}' on workflow ${workflowId}`);
+            return result as T;
         } catch (error) {
-            this.logger.error(
-                `Failed to query '${queryName}' on workflow ${workflowId}: ${error.message}`,
-            );
-            throw new Error(
-                `Failed to query '${queryName}' on workflow ${workflowId}: ${error.message}`,
-            );
+            const errorMsg = `Failed to query '${queryName}' on workflow ${workflowId}: ${error.message}`;
+            this.logger.error(errorMsg);
+            throw new Error(errorMsg);
         }
     }
 
     /**
      * Terminate a running workflow
-     *
-     * @param workflowId ID of the workflow to terminate
-     * @param reason Reason for termination (optional)
      */
     async terminateWorkflow(workflowId: string, reason?: string): Promise<void> {
         this.ensureClientInitialized();
@@ -167,16 +135,16 @@ export class TemporalClientService implements OnModuleInit {
         try {
             const handle = await this.workflowClient!.getHandle(workflowId);
             await handle.terminate(reason);
+            this.logger.log(`Terminated workflow ${workflowId}${reason ? `: ${reason}` : ''}`);
         } catch (error) {
-            this.logger.error(`Failed to terminate workflow ${workflowId}: ${error.message}`);
-            throw new Error(`Failed to terminate workflow ${workflowId}: ${error.message}`);
+            const errorMsg = `Failed to terminate workflow ${workflowId}: ${error.message}`;
+            this.logger.error(errorMsg);
+            throw new Error(errorMsg);
         }
     }
 
     /**
      * Cancel a running workflow
-     *
-     * @param workflowId ID of the workflow to cancel
      */
     async cancelWorkflow(workflowId: string): Promise<void> {
         this.ensureClientInitialized();
@@ -184,18 +152,16 @@ export class TemporalClientService implements OnModuleInit {
         try {
             const handle = await this.workflowClient!.getHandle(workflowId);
             await handle.cancel();
+            this.logger.log(`Cancelled workflow ${workflowId}`);
         } catch (error) {
-            this.logger.error(`Failed to cancel workflow ${workflowId}: ${error.message}`);
-            throw new Error(`Failed to cancel workflow ${workflowId}: ${error.message}`);
+            const errorMsg = `Failed to cancel workflow ${workflowId}: ${error.message}`;
+            this.logger.error(errorMsg);
+            throw new Error(errorMsg);
         }
     }
 
     /**
      * Get a workflow handle for a running workflow
-     *
-     * @param workflowId ID of the workflow
-     * @param runId Specific run ID (optional)
-     * @returns Workflow handle
      */
     async getWorkflowHandle(workflowId: string, runId?: string): Promise<WorkflowHandle> {
         this.ensureClientInitialized();
@@ -203,17 +169,14 @@ export class TemporalClientService implements OnModuleInit {
         try {
             return await this.workflowClient!.getHandle(workflowId, runId);
         } catch (error) {
-            this.logger.error(`Failed to get workflow handle for ${workflowId}: ${error.message}`);
-            throw new Error(`Failed to get workflow handle for ${workflowId}: ${error.message}`);
+            const errorMsg = `Failed to get workflow handle for ${workflowId}: ${error.message}`;
+            this.logger.error(errorMsg);
+            throw new Error(errorMsg);
         }
     }
 
     /**
      * Describe a workflow execution
-     *
-     * @param workflowId ID of the workflow
-     * @param runId Specific run ID (optional)
-     * @returns Workflow execution description
      */
     async describeWorkflow(workflowId: string, runId?: string) {
         this.ensureClientInitialized();
@@ -222,17 +185,14 @@ export class TemporalClientService implements OnModuleInit {
             const handle = await this.workflowClient!.getHandle(workflowId, runId);
             return await handle.describe();
         } catch (error) {
-            this.logger.error(`Failed to describe workflow ${workflowId}: ${error.message}`);
-            throw new Error(`Failed to describe workflow ${workflowId}: ${error.message}`);
+            const errorMsg = `Failed to describe workflow ${workflowId}: ${error.message}`;
+            this.logger.error(errorMsg);
+            throw new Error(errorMsg);
         }
     }
 
     /**
      * List workflows matching a query
-     *
-     * @param query Query string in SQL-like syntax to filter workflows
-     * @param pageSize Number of results per page
-     * @returns AsyncIterable of workflow executions
      */
     listWorkflows(query: string, pageSize = 100) {
         this.ensureClientInitialized();
@@ -240,8 +200,27 @@ export class TemporalClientService implements OnModuleInit {
         try {
             return this.workflowClient!.list({ query, pageSize });
         } catch (error) {
-            this.logger.error(`Failed to list workflows with query '${query}': ${error.message}`);
-            throw new Error(`Failed to list workflows with query '${query}': ${error.message}`);
+            const errorMsg = `Failed to list workflows with query '${query}': ${error.message}`;
+            this.logger.error(errorMsg);
+            throw new Error(errorMsg);
         }
+    }
+
+    /**
+     * Ensure client is initialized before performing operations
+     */
+    private ensureClientInitialized(): void {
+        if (!this.workflowClient) {
+            throw new Error(ERRORS.CLIENT_NOT_INITIALIZED);
+        }
+    }
+
+    /**
+     * Generate a unique workflow ID
+     */
+    private generateWorkflowId(workflowType: string): string {
+        const timestamp = Date.now();
+        const random = Math.random().toString(36).slice(2);
+        return `${workflowType}-${timestamp}-${random}`;
     }
 }
