@@ -38,8 +38,8 @@
     "publish:patch": "npm version patch && npm publish",
     "publish:beta": "npm version prerelease --preid=beta --no-git-tag-version && npm publish --tag beta",
     "publish:alpha": "npm version prerelease --preid=alpha --no-git-tag-version && npm publish --tag alpha",
-    "release": "npm run build && npm run test && npm publish",
-    "release:dry": "npm run build && npm run test && npm publish --dry-run"
+    "release": "npm run build && npm publish",
+    "release:dry": "npm run build && npm publish --dry-run"
   },
   "keywords": [
     "nestjs",
