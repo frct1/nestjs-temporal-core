@@ -1,45 +1,35 @@
 # NestJS Temporal Core
 
-A comprehensive NestJS integration for [Temporal.io](https://temporal.io/) that provides seamless worker and client support with auto-discovery, declarative scheduling, and enterprise-ready features for building reliable distributed applications.
+A comprehensive NestJS integration for [Temporal.io](https://temporal.io/) that provides seamless workflow orchestration with auto-discovery, declarative scheduling, and enterprise-ready features.
 
 [![npm version](https://badge.fury.io/js/nestjs-temporal-core.svg)](https://badge.fury.io/js/nestjs-temporal-core)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/%3C%2F%3E-TypeScript-%230074c1.svg)](http://www.typescriptlang.org/)
 
-## 📚 Documentation
-
-### Quick Links
-- **[🚀 Getting Started](./docs/getting-started.md)** - Installation, basic setup, and first workflow
-- **[⚙️ Configuration](./docs/configuration.md)** - Complete configuration reference and examples
-- **[📖 API Reference](./docs/api-reference.md)** - Detailed API documentation for all services and decorators
-- **[🍳 Examples & Recipes](./docs/examples.md)** - Practical examples and common patterns
-
 ## Overview
 
-NestJS Temporal Core makes it easy to integrate Temporal.io with your NestJS applications using familiar decorator patterns. Temporal is a durable execution system for reliable microservices and workflow orchestration.
+NestJS Temporal Core brings the power of Temporal's durable execution to NestJS applications with native decorator patterns, automatic discovery, and comprehensive lifecycle management. Build reliable distributed systems with workflows, activities, and scheduled tasks.
 
-## ✨ Features
+## 🚀 Key Features
 
-- 🚀 **Easy NestJS Integration** - Simple module registration with unified configuration
-- 🎯 **Auto-Discovery** - Automatic discovery of workflow controllers and scheduled workflows
-- 🔄 **Complete Lifecycle Management** - Automatic worker initialization and graceful shutdown
-- 📋 **Declarative Decorators** - NestJS-style `@WorkflowController`, `@Cron`, `@Interval`, and more
-- 🕐 **Smart Scheduling** - Built-in cron and interval-based workflow scheduling with management
-- 🔌 **Connection Management** - Simplified connection handling with TLS and Temporal Cloud support
-- 🔒 **Type Safety** - Clean, strongly typed interfaces for all Temporal concepts
-- 📡 **Enhanced Client** - Methods for starting, signaling, and querying workflows with auto-discovery
-- 📊 **Worker Management** - Advanced worker lifecycle control, monitoring, and health checks
-- 🏭 **Production Ready** - Environment-aware configuration, health monitoring, and graceful degradation
+- **🎯 NestJS-Native Integration** - Familiar decorator patterns (`@WorkflowController`, `@Activity`, `@Cron`)
+- **🔍 Auto-Discovery** - Automatic detection of workflows, activities, and scheduled tasks
+- **📅 Declarative Scheduling** - Built-in cron and interval scheduling with `@Cron` and `@Interval`
+- **🔄 Unified Service** - Single `TemporalService` for all operations (workflows, signals, queries, schedules)
+- **⚙️ Flexible Configuration** - Support for client-only, worker-only, or unified deployments
+- **🏥 Health Monitoring** - Built-in health checks and status monitoring
+- **🔧 Production Ready** - TLS support, connection management, graceful shutdowns
+- **📊 Schedule Management** - Full lifecycle management of scheduled workflows
 
-## 🚀 Quick Start
-
-### Installation
+## 📦 Installation
 
 ```bash
 npm install nestjs-temporal-core @temporalio/client @temporalio/worker @temporalio/workflow
 ```
 
-### Basic Setup
+## 🚀 Quick Start
+
+### 1. Basic Module Setup
 
 ```typescript
 // app.module.ts
@@ -53,7 +43,7 @@ import { TemporalModule } from 'nestjs-temporal-core';
                 address: 'localhost:7233',
                 namespace: 'default',
             },
-            taskQueue: 'my-task-queue',
+            taskQueue: 'my-app',
             worker: {
                 workflowsPath: './dist/workflows',
                 activityClasses: [EmailActivities],
@@ -66,141 +56,319 @@ import { TemporalModule } from 'nestjs-temporal-core';
 export class AppModule {}
 ```
 
-### Create a Workflow Controller
+### 2. Create Activities
 
 ```typescript
-import { WorkflowController, WorkflowMethod, Cron, Signal, Query } from 'nestjs-temporal-core';
+// activities/email.activities.ts
+import { Injectable } from '@nestjs/common';
+import { Activity, ActivityMethod } from 'nestjs-temporal-core';
 
-@WorkflowController({ taskQueue: 'orders' })
-export class OrderWorkflowController {
+@Injectable()
+@Activity()
+export class EmailActivities {
+    @ActivityMethod()
+    async sendWelcomeEmail(email: string, name: string): Promise<boolean> {
+        console.log(`Sending welcome email to ${email}`);
+        // Email sending logic here
+        return true;
+    }
+
+    @ActivityMethod()
+    async sendNotification(email: string, message: string): Promise<void> {
+        console.log(`Sending notification to ${email}: ${message}`);
+        // Notification logic here
+    }
+}
+```
+
+### 3. Create Workflow Controller
+
+```typescript
+// workflows/user.controller.ts
+import { WorkflowController, WorkflowMethod, Signal, Query, Cron } from 'nestjs-temporal-core';
+import { proxyActivities } from '@temporalio/workflow';
+
+interface EmailActivities {
+    sendWelcomeEmail(email: string, name: string): Promise<boolean>;
+    sendNotification(email: string, message: string): Promise<void>;
+}
+
+const activities = proxyActivities<EmailActivities>({
+    startToCloseTimeout: '1m',
+});
+
+@WorkflowController({ taskQueue: 'user-workflows' })
+export class UserWorkflowController {
     private status = 'pending';
-    
+
     @WorkflowMethod()
-    async processOrder(orderId: string, customerId: string): Promise<string> {
+    async onboardUser(email: string, name: string): Promise<string> {
         this.status = 'processing';
-        // Workflow logic here
+
+        // Send welcome email
+        await activities.sendWelcomeEmail(email, name);
+
+        // Send follow-up notification
+        await activities.sendNotification(email, 'Welcome to our platform!');
+
         this.status = 'completed';
         return this.status;
     }
 
-    @Cron('0 8 * * *', {
-        scheduleId: 'daily-order-report',
-        description: 'Generate daily order report'
+    @Cron('0 9 * * *', {
+        scheduleId: 'daily-user-report',
+        description: 'Daily user onboarding report',
     })
     @WorkflowMethod()
     async generateDailyReport(): Promise<void> {
-        console.log('Generating daily order report...');
+        console.log('Generating daily user report...');
+        // Report generation logic
     }
 
-    @Signal('addItem')
-    async addItemToOrder(item: any): Promise<void> {
-        console.log('Item added to order:', item);
+    @Signal('updateStatus')
+    async updateUserStatus(newStatus: string): Promise<void> {
+        this.status = newStatus;
     }
 
     @Query('getStatus')
-    getOrderStatus(): string {
+    getUserStatus(): string {
         return this.status;
     }
 }
 ```
 
-### Use the Service
+### 4. Use in Services
 
 ```typescript
+// services/user.service.ts
 import { Injectable } from '@nestjs/common';
 import { TemporalService } from 'nestjs-temporal-core';
 
 @Injectable()
-export class OrderService {
-    constructor(private readonly temporalService: TemporalService) {}
+export class UserService {
+    constructor(private readonly temporal: TemporalService) {}
 
-    async processOrder(orderId: string, customerId: string): Promise<string> {
-        const { workflowId } = await this.temporalService.startWorkflow(
-            'processOrder',
-            [orderId, customerId],
-            { workflowId: `order-${orderId}` }
-        );
+    async onboardNewUser(email: string, name: string): Promise<string> {
+        const { workflowId } = await this.temporal.startWorkflow('onboardUser', [email, name], {
+            taskQueue: 'user-workflows',
+            workflowId: `onboard-${email}-${Date.now()}`,
+        });
 
         return workflowId;
+    }
+
+    async getUserStatus(workflowId: string): Promise<string> {
+        return await this.temporal.queryWorkflow(workflowId, 'getStatus');
+    }
+
+    async updateUserStatus(workflowId: string, status: string): Promise<void> {
+        await this.temporal.signalWorkflow(workflowId, 'updateStatus', [status]);
     }
 }
 ```
 
-## 📖 Core Concepts
-
-### Workflow Controllers
-New NestJS-style controllers for defining workflows with auto-discovery and declarative scheduling.
-
-### Activities  
-Reusable business logic components that can be called from workflows.
-
-### Scheduling
-Built-in support for cron and interval-based workflow scheduling using decorators.
-
-### Auto-Discovery
-Automatic detection and registration of workflow controllers and scheduled workflows.
-
 ## 🏗️ Architecture
 
 ```
-┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   NestJS App    │    │ Temporal Server  │    │  Worker Process │
-│                 │    │                  │    │                 │
-│ ┌─────────────┐ │    │ ┌──────────────┐ │    │ ┌─────────────┐ │
-│ │ Controllers │ │───▶│ │  Workflows   │ │───▶│ │ Activities  │ │
-│ │   Services  │ │    │ │  Schedules   │ │    │ │  Workers    │ │
-│ └─────────────┘ │    │ └──────────────┘ │    │ └─────────────┘ │
-└─────────────────┘    └──────────────────┘    └─────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│                     NestJS Application                      │
+├─────────────────────────────────────────────────────────────┤
+│  Controllers    │    Services    │   Workflow Controllers   │
+│  - UserController │ - UserService  │ - @WorkflowController   │
+│  - API Endpoints  │ - Business Logic│ - @WorkflowMethod      │
+├─────────────────────────────────────────────────────────────┤
+│                    TemporalService                          │
+│  - startWorkflow()  │ - signalWorkflow() │ - queryWorkflow() │
+│  - scheduleManagement │ - discovery │ - healthChecks        │
+├─────────────────────────────────────────────────────────────┤
+│    Client Module    │    Worker Module    │  Discovery       │
+│ - TemporalClient    │ - WorkerManager     │ - Auto-discovery │
+│ - ScheduleService   │ - ActivityRegistry  │ - Schedule Mgmt  │
+├─────────────────────────────────────────────────────────────┤
+│                    Temporal Server                          │
+│              Workflows ←→ Activities ←→ Schedules            │
+└─────────────────────────────────────────────────────────────┘
+```
+
+## 📋 Core Concepts
+
+### Workflow Controllers
+
+Define durable workflows using familiar NestJS controller patterns:
+
+```typescript
+@WorkflowController({ taskQueue: 'orders' })
+export class OrderWorkflowController {
+    @WorkflowMethod()
+    async processOrder(orderId: string): Promise<string> {
+        // Durable workflow logic
+    }
+}
+```
+
+### Activities
+
+Implement business logic that can be retried and monitored:
+
+```typescript
+@Activity()
+export class PaymentActivities {
+    @ActivityMethod()
+    async processPayment(amount: number): Promise<string> {
+        // External API calls, database operations
+    }
+}
+```
+
+### Scheduling
+
+Declare scheduled workflows with cron expressions or intervals:
+
+```typescript
+@Cron('0 8 * * *', { scheduleId: 'daily-report' })
+@WorkflowMethod()
+async generateReport(): Promise<void> {
+  // Scheduled workflow logic
+}
 ```
 
 ## 🎯 Use Cases
 
 - **Order Processing** - Reliable order fulfillment with compensation
-- **Payment Processing** - Multi-step payment flows with retries
-- **Data Pipelines** - Long-running data processing workflows
-- **Scheduled Jobs** - Cron-based and interval-based background tasks
+- **User Onboarding** - Multi-step user journeys with timeouts
+- **Data Pipelines** - Long-running ETL processes
+- **Scheduled Tasks** - Cron jobs and recurring workflows
 - **Saga Patterns** - Distributed transaction management
-- **Human Tasks** - Workflows requiring human intervention
-- **Microservice Orchestration** - Coordinating multiple services
+- **Payment Processing** - Multi-step payment flows with retries
 
-## 🌟 What's New in v3.0
+## ⚙️ Configuration Options
 
-- **🎮 Workflow Controllers** - NestJS-style workflow definition
-- **📅 Declarative Scheduling** - `@Cron` and `@Interval` decorators
-- **🔍 Auto-Discovery** - Automatic workflow and schedule detection
-- **📊 Enhanced Monitoring** - Built-in health checks and metrics
-- **🏭 Production Features** - Worker presets, graceful shutdown, error handling
-- **🔧 Better Developer Experience** - Improved APIs and TypeScript support
+### Basic Configuration
 
-## 📦 Packages
+```typescript
+TemporalModule.register({
+    connection: {
+        address: 'localhost:7233',
+        namespace: 'default',
+    },
+    taskQueue: 'my-app',
+    worker: {
+        workflowsPath: './dist/workflows',
+        activityClasses: [EmailActivities, PaymentActivities],
+    },
+});
+```
 
-| Package                | Version                                                                                                             | Description              |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------- | ------------------------ |
-| `nestjs-temporal-core` | [![npm](https://img.shields.io/npm/v/nestjs-temporal-core.svg)](https://www.npmjs.com/package/nestjs-temporal-core) | Main integration package |
-| `@temporalio/client`   | [![npm](https://img.shields.io/npm/v/@temporalio/client.svg)](https://www.npmjs.com/package/@temporalio/client)     | Temporal client library  |
-| `@temporalio/worker`   | [![npm](https://img.shields.io/npm/v/@temporalio/worker.svg)](https://www.npmjs.com/package/@temporalio/worker)     | Temporal worker library  |
-| `@temporalio/workflow` | [![npm](https://img.shields.io/npm/v/@temporalio/workflow.svg)](https://www.npmjs.com/package/@temporalio/workflow) | Workflow runtime library |
+### Client-Only Mode
 
-## 🤝 Community
+```typescript
+TemporalModule.forClient({
+    connection: {
+        address: 'temporal.company.com:7233',
+        namespace: 'production',
+        tls: true,
+        apiKey: process.env.TEMPORAL_API_KEY,
+    },
+});
+```
 
-- **GitHub Discussions** - Ask questions and share ideas
-- **Issues** - Report bugs and request features  
-- **Pull Requests** - Contribute to the project
+### Async Configuration
+
+```typescript
+TemporalModule.registerAsync({
+    imports: [ConfigModule],
+    useFactory: (config: ConfigService) => ({
+        connection: {
+            address: config.get('TEMPORAL_ADDRESS'),
+            namespace: config.get('TEMPORAL_NAMESPACE'),
+        },
+        taskQueue: config.get('TEMPORAL_TASK_QUEUE'),
+        worker: {
+            workflowBundle: require('./workflows-bundle'),
+            activityClasses: [EmailActivities],
+        },
+    }),
+    inject: [ConfigService],
+});
+```
+
+## 🔧 Advanced Features
+
+### Health Monitoring
+
+```typescript
+// Get system status
+const status = await temporalService.getSystemStatus();
+console.log('Workflows discovered:', status.discovery.methods);
+console.log('Active schedules:', status.schedules.active);
+
+// Worker health check
+const health = await temporalService.getWorkerHealth();
+console.log('Worker status:', health.status);
+```
+
+### Schedule Management
+
+```typescript
+// Manage discovered schedules
+await temporalService.pauseSchedule('daily-report', 'Maintenance mode');
+await temporalService.resumeSchedule('daily-report');
+await temporalService.triggerSchedule('daily-report'); // Run now
+
+// Get schedule information
+const schedules = temporalService.getManagedSchedules();
+const stats = temporalService.getScheduleStats();
+```
+
+### Discovery Introspection
+
+```typescript
+// Discover available workflows
+const workflows = temporalService.getAvailableWorkflows();
+const workflowInfo = temporalService.getWorkflowInfo('processOrder');
+
+// Check capabilities
+if (temporalService.hasWorkflow('processOrder')) {
+    // Start the workflow
+}
+```
+
+## 📊 Monitoring & Observability
+
+The package provides comprehensive monitoring capabilities:
+
+- **Worker Status** - Health checks, uptime, activity counts
+- **Schedule Management** - Active/paused schedules, execution stats
+- **Discovery Metrics** - Discovered workflows, activities, schedules
+- **Connection Health** - Client connection status and errors
+
+## 🌍 Environment Support
+
+- **Development** - Filesystem-based workflows, enhanced logging
+- **Production** - Bundled workflows, optimized worker settings
+- **Testing** - Mock support, isolated testing capabilities
+
+## 📚 Documentation
+
+- **[Getting Started](./docs/getting-started.md)** - Installation and basic setup
+- **[Configuration](./docs/configuration.md)** - Complete configuration guide
+- **[API Reference](./docs/api-reference.md)** - Detailed API documentation
+- **[Examples](./docs/examples.md)** - Real-world examples and patterns
+
+## 🤝 Contributing
+
+Contributions are welcome! Please read our [Contributing Guide](./CONTRIBUTING.md) for details on our code of conduct and the process for submitting pull requests.
 
 ## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## 👨‍💻 Author
-
-**Harsh M** - [GitHub](https://github.com/harsh-simform)
-
 ## 🙏 Acknowledgments
 
 - [Temporal.io](https://temporal.io/) - For the amazing workflow engine
 - [NestJS](https://nestjs.com/) - For the incredible framework
-- [TypeScript](https://www.typescriptlang.org/) - For making JavaScript enjoyable
+- The Temporal community for inspiration and feedback
 
 ---
 
-**[📚 Continue to Getting Started →](./docs/getting-started.md)**
+Built with ❤️ for the NestJS and Temporal communities.

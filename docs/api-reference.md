@@ -1,6 +1,6 @@
 # 📖 API Reference
 
-Complete API documentation for all modules, services, decorators, and interfaces in NestJS Temporal Core.
+Complete API documentation for NestJS Temporal Core.
 
 ## Table of Contents
 
@@ -9,35 +9,50 @@ Complete API documentation for all modules, services, decorators, and interfaces
 - [Decorators](#decorators)
 - [Interfaces](#interfaces)
 - [Constants & Presets](#constants--presets)
-- [Types](#types)
-- [Error Classes](#error-classes)
+- [Discovery Services](#discovery-services)
+- [Error Handling](#error-handling)
 
 ## Modules
 
 ### TemporalModule
 
-Main module providing both client and worker functionality.
+Main module providing unified Temporal integration.
 
 #### Static Methods
 
-##### `register(options: TemporalModuleOptions): DynamicModule`
+##### `register(options: TemporalOptions): DynamicModule`
 
-Synchronous module registration.
+Synchronous module registration with both client and worker capabilities.
 
 ```typescript
-TemporalModule.register({
-    connection: {
-        address: 'localhost:7233',
-        namespace: 'default',
-    },
-    taskQueue: 'my-queue',
-    worker: {
-        workflowsPath: './dist/workflows',
-        activityClasses: [MyActivities],
-    },
-    isGlobal: true,
+import { TemporalModule } from 'nestjs-temporal-core';
+
+@Module({
+    imports: [
+        TemporalModule.register({
+            connection: {
+                address: 'localhost:7233',
+                namespace: 'default',
+            },
+            taskQueue: 'my-queue',
+            worker: {
+                workflowsPath: './dist/workflows',
+                activityClasses: [MyActivities],
+                autoStart: true,
+            },
+            isGlobal: true,
+        }),
+    ],
 })
+export class AppModule {}
 ```
+
+**Options:**
+
+- `connection`: Connection configuration
+- `taskQueue`: Default task queue name
+- `worker`: Worker configuration (optional)
+- `isGlobal`: Register as global module (default: false)
 
 ##### `registerAsync(options: TemporalAsyncOptions): DynamicModule`
 
@@ -46,16 +61,24 @@ Asynchronous module registration with dependency injection.
 ```typescript
 TemporalModule.registerAsync({
     imports: [ConfigModule],
-    inject: [ConfigService],
     useFactory: (config: ConfigService) => ({
-        // ... configuration
+        connection: {
+            address: config.get('TEMPORAL_ADDRESS'),
+            namespace: config.get('TEMPORAL_NAMESPACE'),
+        },
+        taskQueue: config.get('TEMPORAL_TASK_QUEUE'),
+        worker: {
+            workflowBundle: require('./workflows-bundle'),
+            activityClasses: [MyActivities],
+        },
     }),
-})
+    inject: [ConfigService],
+});
 ```
 
-##### `forClient(options: TemporalClientOptions): DynamicModule`
+##### `forClient(options): DynamicModule`
 
-Client-only module registration.
+Client-only module registration (no worker).
 
 ```typescript
 TemporalModule.forClient({
@@ -63,11 +86,13 @@ TemporalModule.forClient({
         address: 'temporal.company.com:7233',
         namespace: 'production',
         tls: true,
+        apiKey: process.env.TEMPORAL_API_KEY,
     },
-})
+    isGlobal: true,
+});
 ```
 
-##### `forWorker(options: TemporalWorkerOptions): DynamicModule`
+##### `forWorker(options): DynamicModule`
 
 Worker-only module registration.
 
@@ -80,22 +105,42 @@ TemporalModule.forWorker({
     taskQueue: 'worker-queue',
     workflowsPath: './dist/workflows',
     activityClasses: [ProcessingActivities],
-})
+    isGlobal: true,
+});
 ```
 
 ### TemporalClientModule
 
 Client-only module for workflow operations.
 
-##### `register(options: TemporalClientOptions): DynamicModule`
-##### `registerAsync(options: TemporalClientAsyncOptions): DynamicModule`
+```typescript
+import { TemporalClientModule } from 'nestjs-temporal-core';
+
+TemporalClientModule.register({
+    connection: {
+        address: 'localhost:7233',
+        namespace: 'default',
+    },
+});
+```
 
 ### TemporalWorkerModule
 
 Worker-only module for activity execution.
 
-##### `register(options: TemporalWorkerOptions): DynamicModule`
-##### `registerAsync(options: TemporalWorkerAsyncOptions): DynamicModule`
+```typescript
+import { TemporalWorkerModule } from 'nestjs-temporal-core';
+
+TemporalWorkerModule.register({
+    connection: {
+        address: 'localhost:7233',
+        namespace: 'default',
+    },
+    taskQueue: 'worker-queue',
+    workflowsPath: './dist/workflows',
+    activityClasses: [MyActivities],
+});
+```
 
 ## Core Services
 
@@ -105,20 +150,23 @@ Main service providing unified access to all Temporal functionality.
 
 #### Workflow Operations
 
-##### `startWorkflow<T = any>(type: string, args: any[], options?: StartWorkflowOptions): Promise<WorkflowStartResult<T>>`
+##### `startWorkflow<T, A>(type: string, args: A, options?: Partial<StartWorkflowOptions>): Promise<WorkflowStartResult<T>>`
 
-Start a workflow with auto-discovery support.
+Start a workflow with auto-discovery and enhanced options.
 
 ```typescript
 const { workflowId, result } = await temporalService.startWorkflow(
     'processOrder',
     [orderId, customerId],
     {
+        taskQueue: 'orders',
         workflowId: `order-${orderId}`,
         searchAttributes: { 'customer-id': customerId },
-    }
+    },
 );
 ```
+
+**Returns:** Object with `workflowId`, `firstExecutionRunId`, `result`, and `handle`
 
 ##### `signalWorkflow(workflowId: string, signalName: string, args?: any[]): Promise<void>`
 
@@ -128,12 +176,12 @@ Send a signal to a running workflow.
 await temporalService.signalWorkflow('order-123', 'addItem', [item]);
 ```
 
-##### `queryWorkflow<T = any>(workflowId: string, queryName: string, args?: any[]): Promise<T>`
+##### `queryWorkflow<T>(workflowId: string, queryName: string, args?: any[]): Promise<T>`
 
-Query a running workflow.
+Query a running workflow's state.
 
 ```typescript
-const status = await temporalService.queryWorkflow('order-123', 'getStatus');
+const status = await temporalService.queryWorkflow<string>('order-123', 'getStatus');
 ```
 
 ##### `terminateWorkflow(workflowId: string, reason?: string): Promise<void>`
@@ -141,7 +189,7 @@ const status = await temporalService.queryWorkflow('order-123', 'getStatus');
 Terminate a workflow execution.
 
 ```typescript
-await temporalService.terminateWorkflow('order-123', 'Order cancelled');
+await temporalService.terminateWorkflow('order-123', 'Order cancelled by user');
 ```
 
 ##### `cancelWorkflow(workflowId: string): Promise<void>`
@@ -154,23 +202,24 @@ await temporalService.cancelWorkflow('order-123');
 
 #### Discovery Operations
 
-##### `getAvailableWorkflows(): WorkflowInfo[]`
+##### `getAvailableWorkflows(): string[]`
 
 Get all discovered workflow types.
 
 ```typescript
 const workflows = temporalService.getAvailableWorkflows();
-console.log(workflows.map(w => w.name));
+// ['processOrder', 'generateReport', 'sendEmail']
 ```
 
-##### `getWorkflowInfo(name: string): WorkflowInfo | undefined`
+##### `getWorkflowInfo(name: string): WorkflowMethodInfo | undefined`
 
 Get metadata for a specific workflow.
 
 ```typescript
 const info = temporalService.getWorkflowInfo('processOrder');
 if (info) {
-    console.log(`Task Queue: ${info.taskQueue}`);
+    console.log(`Method: ${info.methodName}`);
+    console.log(`Options:`, info.options);
 }
 ```
 
@@ -207,7 +256,7 @@ await temporalService.pauseSchedule('daily-report', 'Maintenance mode');
 Resume a paused schedule.
 
 ```typescript
-await temporalService.resumeSchedule('daily-report', 'Maintenance complete');
+await temporalService.resumeSchedule('daily-report');
 ```
 
 ##### `getManagedSchedules(): string[]`
@@ -216,35 +265,46 @@ Get all managed schedule IDs.
 
 ```typescript
 const schedules = temporalService.getManagedSchedules();
+// ['daily-report', 'weekly-cleanup', 'hourly-sync']
 ```
 
-##### `getScheduleInfo(scheduleId: string): Promise<ScheduleDescription>`
+##### `getScheduleStats(): ScheduleStats`
 
-Get detailed schedule information.
+Get schedule statistics.
 
 ```typescript
-const info = await temporalService.getScheduleInfo('daily-report');
+const stats = temporalService.getScheduleStats();
+// {
+//   total: 5,
+//   active: 3,
+//   inactive: 2,
+//   errors: 0
+// }
 ```
 
 #### Worker Management
 
 ##### `hasWorker(): boolean`
 
-Check if worker is available.
+Check if worker functionality is available.
 
 ```typescript
 if (temporalService.hasWorker()) {
-    const status = await temporalService.getWorkerStatus();
+    const status = temporalService.getWorkerStatus();
 }
 ```
 
-##### `getWorkerStatus(): Promise<WorkerStatus>`
+##### `getWorkerStatus(): WorkerStatus | null`
 
 Get comprehensive worker status.
 
 ```typescript
-const status = await temporalService.getWorkerStatus();
-console.log(`Worker running: ${status.isRunning}`);
+const status = temporalService.getWorkerStatus();
+if (status) {
+    console.log(`Running: ${status.isRunning}`);
+    console.log(`Activities: ${status.activitiesCount}`);
+    console.log(`Uptime: ${status.uptime}ms`);
+}
 ```
 
 ##### `restartWorker(): Promise<void>`
@@ -261,9 +321,7 @@ Get worker health information.
 
 ```typescript
 const health = await temporalService.getWorkerHealth();
-if (health.status !== 'healthy') {
-    console.warn('Worker health issues:', health.details);
-}
+console.log(`Status: ${health.status}`); // 'healthy' | 'unhealthy' | 'degraded' | 'not_available'
 ```
 
 #### System Operations
@@ -274,83 +332,60 @@ Get comprehensive system status.
 
 ```typescript
 const status = await temporalService.getSystemStatus();
-console.log(`Workflows: ${status.discovery.workflowCount}`);
-console.log(`Schedules: ${status.schedules.managed}`);
+console.log(`Client available: ${status.client.available}`);
+console.log(`Worker available: ${status.worker.available}`);
+console.log(`Workflows discovered: ${status.discovery.methods}`);
+console.log(`Active schedules: ${status.schedules.active}`);
 ```
 
 ##### `getClient(): TemporalClientService`
 
-Get the client service for advanced operations.
-
-```typescript
-const client = temporalService.getClient();
-const handle = client.getWorkflowHandle('order-123');
-```
+Access the underlying client service.
 
 ##### `getScheduleService(): TemporalScheduleService`
 
-Get the schedule service.
-
-```typescript
-const scheduleService = temporalService.getScheduleService();
-```
+Access the schedule service.
 
 ##### `getWorkerManager(): WorkerManager | undefined`
 
-Get the worker manager (if available).
-
-```typescript
-const workerManager = temporalService.getWorkerManager();
-if (workerManager) {
-    await workerManager.shutdown();
-}
-```
+Access the worker manager (if available).
 
 ### TemporalClientService
 
-Service for client-only operations.
+Low-level client service for advanced operations.
 
 #### Methods
 
-##### `startWorkflow<T>(type: string, args: any[], options: StartWorkflowOptions): Promise<WorkflowHandle<T>>`
+##### `startWorkflow<T, A>(type: string, args: A, options: StartWorkflowOptions): Promise<WorkflowStartResult<T>>`
 
-Start a workflow execution.
+Start a workflow with full control over options.
 
-##### `getWorkflowHandle<T>(workflowId: string, runId?: string): WorkflowHandle<T>`
+##### `getWorkflowHandle(workflowId: string, runId?: string): Promise<WorkflowHandle>`
 
-Get a handle to manage a workflow.
-
-##### `signalWorkflow(workflowId: string, signal: string, args?: any[], runId?: string): Promise<void>`
-
-Send a signal to a workflow.
-
-##### `queryWorkflow<T>(workflowId: string, query: string, args?: any[], runId?: string): Promise<T>`
-
-Query a workflow.
-
-##### `terminateWorkflow(workflowId: string, reason?: string, runId?: string): Promise<void>`
-
-Terminate a workflow.
-
-##### `cancelWorkflow(workflowId: string, runId?: string): Promise<void>`
-
-Cancel a workflow.
+Get a handle to manage a specific workflow execution.
 
 ##### `describeWorkflow(workflowId: string, runId?: string): Promise<WorkflowExecution>`
 
-Get workflow execution details.
+Get detailed workflow execution information.
 
-##### `listWorkflows(query?: string): AsyncIterable<WorkflowExecutionInfo>`
+##### `listWorkflows(query: string, pageSize?: number): AsyncIterable<WorkflowExecutionInfo>`
 
 List workflows matching a query.
 
+```typescript
+const workflows = clientService.listWorkflows('WorkflowType="processOrder"');
+for await (const workflow of workflows) {
+    console.log(`Workflow: ${workflow.workflowId}`);
+}
+```
+
 ### TemporalScheduleService
 
-Service for schedule management.
+Service for schedule management operations.
 
 #### Methods
 
-##### `createCronWorkflow(scheduleId: string, workflowType: string, cron: string, taskQueue: string, args?: any[], note?: string): Promise<ScheduleHandle>`
+##### `createCronWorkflow(scheduleId: string, workflowType: string, cron: string, taskQueue: string, args?: any[], description?: string, timezone?: string): Promise<ScheduleHandle>`
 
 Create a cron-based scheduled workflow.
 
@@ -361,11 +396,12 @@ const handle = await scheduleService.createCronWorkflow(
     '0 8 * * *',
     'reports-queue',
     ['daily'],
-    'Daily business report'
+    'Daily business report',
+    'America/New_York',
 );
 ```
 
-##### `createIntervalWorkflow(scheduleId: string, workflowType: string, interval: Duration, taskQueue: string, args?: any[], note?: string): Promise<ScheduleHandle>`
+##### `createIntervalWorkflow(scheduleId: string, workflowType: string, interval: string, taskQueue: string, args?: any[], description?: string): Promise<ScheduleHandle>`
 
 Create an interval-based scheduled workflow.
 
@@ -374,75 +410,21 @@ const handle = await scheduleService.createIntervalWorkflow(
     'health-check',
     'healthCheck',
     '5m',
-    'health-queue'
+    'health-queue',
 );
 ```
 
-##### `pauseSchedule(scheduleId: string, note?: string): Promise<void>`
-
-Pause a schedule.
-
-##### `resumeSchedule(scheduleId: string, note?: string): Promise<void>`
-
-Resume a schedule.
-
-##### `deleteSchedule(scheduleId: string): Promise<void>`
-
-Delete a schedule.
-
-##### `triggerNow(scheduleId: string): Promise<void>`
-
-Trigger immediate execution.
-
-##### `listSchedules(): Promise<ScheduleListEntry[]>`
+##### `listSchedules(pageSize?: number): Promise<ScheduleListEntry[]>`
 
 List all schedules.
 
 ##### `describeSchedule(scheduleId: string): Promise<ScheduleDescription>`
 
-Get schedule details.
+Get detailed schedule information.
 
-##### `updateSchedule(scheduleId: string, options: ScheduleUpdateOptions): Promise<void>`
+##### `updateSchedule(scheduleId: string, updateFn: (schedule: any) => any): Promise<void>`
 
 Update schedule configuration.
-
-### WorkerManager
-
-Service for worker lifecycle management.
-
-#### Methods
-
-##### `startWorker(): Promise<void>`
-
-Manually start the worker.
-
-##### `shutdown(graceful?: boolean): Promise<void>`
-
-Shutdown the worker.
-
-##### `restartWorker(): Promise<void>`
-
-Restart the worker.
-
-##### `getWorker(): Worker | undefined`
-
-Get the underlying Temporal worker.
-
-##### `getWorkerStatus(): Promise<WorkerStatus>`
-
-Get worker status information.
-
-##### `healthCheck(): Promise<HealthStatus>`
-
-Get worker health check.
-
-##### `isWorkerRunning(): boolean`
-
-Check if worker is running.
-
-##### `getRegisteredActivities(): string[]`
-
-Get list of registered activity names.
 
 ## Decorators
 
@@ -453,6 +435,9 @@ Get list of registered activity names.
 Mark a class as containing Temporal activities.
 
 ```typescript
+import { Injectable } from '@nestjs/common';
+import { Activity, ActivityMethod } from 'nestjs-temporal-core';
+
 @Injectable()
 @Activity()
 export class EmailActivities {
@@ -465,6 +450,7 @@ export class EmailActivities {
 ```
 
 **Options:**
+
 - `name?: string` - Custom activity class name
 
 #### `@WorkflowController(options?: WorkflowControllerOptions)`
@@ -472,6 +458,8 @@ export class EmailActivities {
 Mark a class as a workflow controller.
 
 ```typescript
+import { WorkflowController, WorkflowMethod } from 'nestjs-temporal-core';
+
 @WorkflowController({ taskQueue: 'orders' })
 export class OrderController {
     @WorkflowMethod()
@@ -483,15 +471,17 @@ export class OrderController {
 ```
 
 **Options:**
+
 - `taskQueue?: string` - Default task queue for workflows
-- `name?: string` - Custom controller name
 
 #### `@Workflow(options: WorkflowOptions)` (Legacy)
 
 Traditional workflow class decorator.
 
 ```typescript
-@Workflow({ name: 'processOrder' })
+import { Workflow, WorkflowMethod } from 'nestjs-temporal-core';
+
+@Workflow({ name: 'processOrder', taskQueue: 'orders' })
 export class OrderWorkflow {
     @WorkflowMethod()
     async execute(orderId: string): Promise<string> {
@@ -503,40 +493,54 @@ export class OrderWorkflow {
 
 ### Method Decorators
 
-#### `@ActivityMethod(name?: string)`
+#### `@ActivityMethod(nameOrOptions?: string | ActivityMethodOptions)`
 
 Mark a method as a Temporal activity.
 
 ```typescript
 @Activity()
 export class EmailActivities {
-    @ActivityMethod() // Uses method name 'sendEmail'
+    @ActivityMethod() // Uses method name
     async sendEmail(to: string): Promise<void> {}
 
     @ActivityMethod('send-notification') // Custom name
     async sendNotification(message: string): Promise<void> {}
+
+    @ActivityMethod({
+        name: 'complex-operation',
+        timeout: '30s',
+        maxRetries: 3,
+    })
+    async complexOperation(): Promise<void> {}
 }
 ```
 
-#### `@WorkflowMethod(options?: WorkflowMethodOptions)`
+**Options:**
+
+- `name?: string` - Custom activity name
+- `timeout?: string | number` - Activity timeout
+- `maxRetries?: number` - Maximum retry attempts
+
+#### `@WorkflowMethod(nameOrOptions?: string | WorkflowMethodOptions)`
 
 Mark a method as a workflow entry point.
 
 ```typescript
 @WorkflowController()
 export class OrderController {
-    @WorkflowMethod({ name: 'processOrder' })
-    async process(orderId: string): Promise<string> {
+    @WorkflowMethod() // Uses method name
+    async processOrder(orderId: string): Promise<string> {
         return 'completed';
+    }
+
+    @WorkflowMethod('cancel-order') // Custom name
+    async cancelOrder(orderId: string): Promise<string> {
+        return 'cancelled';
     }
 }
 ```
 
-**Options:**
-- `name?: string` - Custom workflow name
-- `taskQueue?: string` - Override task queue
-
-#### `@Signal(name?: string)` / `@SignalMethod(name?: string)`
+#### `@Signal(nameOrOptions?: string | SignalOptions)`
 
 Mark a method as a signal handler.
 
@@ -547,10 +551,15 @@ export class OrderController {
     async addItem(item: any): Promise<void> {
         // Handle signal
     }
+
+    @Signal() // Uses method name as signal name
+    async cancel(): Promise<void> {
+        // Handle cancel signal
+    }
 }
 ```
 
-#### `@Query(name?: string)` / `@QueryMethod(name?: string)`
+#### `@Query(nameOrOptions?: string | QueryOptions)`
 
 Mark a method as a query handler.
 
@@ -558,13 +567,18 @@ Mark a method as a query handler.
 @WorkflowController()
 export class OrderController {
     @Query('getStatus')
-    getStatus(): string {
+    getOrderStatus(): string {
         return this.status;
+    }
+
+    @Query() // Uses method name as query name
+    getProgress(): number {
+        return this.progress;
     }
 }
 ```
 
-#### `@Cron(expression: string, options?: CronOptions)`
+#### `@Cron(expression: string, options: CronOptions)`
 
 Schedule a workflow with cron expression.
 
@@ -574,7 +588,7 @@ export class ReportController {
     @Cron('0 8 * * *', {
         scheduleId: 'daily-report',
         description: 'Generate daily report',
-        timezone: 'America/New_York'
+        timezone: 'America/New_York',
     })
     @WorkflowMethod()
     async generateDailyReport(): Promise<void> {}
@@ -582,12 +596,14 @@ export class ReportController {
 ```
 
 **Options:**
-- `scheduleId: string` - Unique schedule identifier
+
+- `scheduleId: string` - Unique schedule identifier (required)
 - `description?: string` - Human-readable description
 - `timezone?: string` - Timezone for cron expression
 - `startPaused?: boolean` - Start schedule in paused state
+- `autoStart?: boolean` - Auto-start on application boot
 
-#### `@Interval(duration: Duration, options?: IntervalOptions)`
+#### `@Interval(duration: string, options: IntervalOptions)`
 
 Schedule a workflow with fixed interval.
 
@@ -596,7 +612,7 @@ Schedule a workflow with fixed interval.
 export class HealthController {
     @Interval('5m', {
         scheduleId: 'health-check',
-        description: 'System health check'
+        description: 'System health check',
     })
     @WorkflowMethod()
     async healthCheck(): Promise<void> {}
@@ -614,10 +630,33 @@ export class MaintenanceController {
         scheduleId: 'weekly-cleanup',
         cron: '0 2 * * 0',
         description: 'Weekly maintenance',
-        startPaused: true
+        startPaused: true,
     })
     @WorkflowMethod()
     async weeklyCleanup(): Promise<void> {}
+}
+```
+
+### Advanced Decorators
+
+#### `@WorkflowStarter(options: WorkflowStarterOptions)`
+
+Auto-generate workflow starter methods.
+
+```typescript
+import { Injectable } from '@nestjs/common';
+import { WorkflowStarter } from 'nestjs-temporal-core';
+
+@Injectable()
+export class OrderService {
+    @WorkflowStarter({
+        workflowType: 'processOrder',
+        taskQueue: 'orders',
+        workflowId: (orderId: string) => `order-${orderId}`,
+    })
+    async startOrderProcessing(orderId: string): Promise<WorkflowHandle> {
+        // Auto-generated implementation
+    }
 }
 ```
 
@@ -633,9 +672,9 @@ export class OrderController {
     @WorkflowMethod()
     async processOrder(
         @WorkflowParam(0) orderId: string,
-        @WorkflowParam(1) customerId: string
+        @WorkflowParam(1) customerId: string,
     ): Promise<string> {
-        // Implementation
+        // orderId = args[0], customerId = args[1]
     }
 }
 ```
@@ -649,30 +688,11 @@ Access workflow execution context.
 export class OrderController {
     @WorkflowMethod()
     async processOrder(
-        orderId: string,
-        @WorkflowContext() context: WorkflowInfo
+        @WorkflowParam() orderId: string,
+        @WorkflowContext() context: WorkflowExecutionContext,
     ): Promise<string> {
-        console.log(`Workflow ID: ${context.workflowId}`);
-        // Implementation
-    }
-}
-```
-
-### Advanced Decorators
-
-#### `@WorkflowStarter(options: WorkflowStarterOptions)`
-
-Auto-generate workflow starter methods.
-
-```typescript
-@Injectable()
-export class OrderService {
-    @WorkflowStarter({
-        workflowType: 'processOrder',
-        taskQueue: 'orders'
-    })
-    async startOrderProcessing(orderId: string): Promise<string> {
-        // Auto-generated implementation
+        console.log('Workflow ID:', context.workflowId);
+        console.log('Run ID:', context.runId);
     }
 }
 ```
@@ -681,136 +701,115 @@ export class OrderService {
 
 ### Configuration Interfaces
 
-#### `TemporalModuleOptions`
+#### `TemporalOptions`
 
 Main module configuration interface.
 
 ```typescript
-interface TemporalModuleOptions {
-    connection: TemporalConnectionOptions;
-    taskQueue?: string;
-    worker?: TemporalWorkerOptions;
-    client?: TemporalClientOptions;
-    isGlobal?: boolean;
+interface TemporalOptions {
+    connection: {
+        address: string; // Temporal server address
+        namespace?: string; // Temporal namespace
+        tls?: boolean | TLSConfig; // TLS configuration
+        apiKey?: string; // API key for Temporal Cloud
+        metadata?: Record<string, string>; // Additional headers
+    };
+    taskQueue?: string; // Default task queue
+    worker?: {
+        workflowsPath?: string; // Path to compiled workflows
+        workflowBundle?: any; // Pre-bundled workflows
+        activityClasses?: any[]; // Activity classes
+        autoStart?: boolean; // Auto-start worker
+        workerOptions?: WorkerCreateOptions; // Advanced worker options
+    };
+    isGlobal?: boolean; // Register as global module
 }
 ```
 
-#### `TemporalConnectionOptions`
+#### `WorkerCreateOptions`
 
-Connection configuration interface.
+Advanced worker configuration.
 
 ```typescript
-interface TemporalConnectionOptions {
-    address: string;
-    namespace: string;
-    apiKey?: string;
-    tls?: boolean | TLSConfig;
-    connectOptions?: ConnectionOptions;
+interface WorkerCreateOptions {
+    maxConcurrentActivityTaskExecutions?: number; // Default: 100
+    maxConcurrentWorkflowTaskExecutions?: number; // Default: 40
+    maxConcurrentLocalActivityExecutions?: number; // Default: 100
+    maxActivitiesPerSecond?: number; // Rate limiting
+    reuseV8Context?: boolean; // Default: true
+    buildId?: string; // Build ID for versioning
+    identity?: string; // Worker identity
+    interceptors?: any[]; // Worker interceptors
 }
 ```
 
-#### `TemporalWorkerOptions`
+#### `StartWorkflowOptions`
 
-Worker configuration interface.
-
-```typescript
-interface TemporalWorkerOptions {
-    workflowsPath?: string;
-    workflowBundle?: any;
-    activityClasses: any[];
-    workerOptions?: WorkerOptions;
-    autoStart?: boolean;
-    shutdownGraceTime?: Duration;
-}
-```
-
-### Discovery Interfaces
-
-#### `WorkflowInfo`
-
-Workflow metadata interface.
+Options for starting a workflow.
 
 ```typescript
-interface WorkflowInfo {
-    name: string;
-    taskQueue?: string;
-    controller?: any;
-    method?: string;
-    signals?: SignalInfo[];
-    queries?: QueryInfo[];
-    schedules?: ScheduleInfo[];
-}
-```
-
-#### `ScheduleInfo`
-
-Schedule metadata interface.
-
-```typescript
-interface ScheduleInfo {
-    scheduleId: string;
-    workflowType: string;
-    cron?: string;
-    interval?: Duration;
-    description?: string;
-    timezone?: string;
-    startPaused?: boolean;
+interface StartWorkflowOptions {
+    taskQueue: string; // Required
+    workflowId?: string; // Custom workflow ID
+    searchAttributes?: Record<string, unknown>; // Search attributes
+    signal?: {
+        // Initial signal
+        name: string;
+        args?: any[];
+    };
+    retry?: {
+        // Retry policy
+        maximumAttempts?: number;
+        initialInterval?: string | number;
+    };
 }
 ```
 
 ### Status Interfaces
 
-#### `SystemStatus`
+#### `WorkerStatus`
 
-System status interface.
+Worker status information.
 
 ```typescript
-interface SystemStatus {
-    client: {
-        connected: boolean;
-        namespace: string;
-        address: string;
-    };
-    worker?: {
-        isRunning: boolean;
-        taskQueue: string;
-        activities: number;
-    };
-    discovery: {
-        workflowCount: number;
-        activityCount: number;
-    };
-    schedules: {
-        managed: number;
-        active: number;
-        paused: number;
-    };
+interface WorkerStatus {
+    isInitialized: boolean;
+    isRunning: boolean;
+    isHealthy: boolean;
+    taskQueue: string;
+    namespace: string;
+    workflowSource: 'bundle' | 'filesystem' | 'none';
+    activitiesCount: number;
+    lastError?: string;
+    startedAt?: Date;
+    uptime?: number;
 }
 ```
 
-#### `HealthStatus`
+#### `ScheduleStats`
 
-Health check interface.
+Schedule statistics.
 
 ```typescript
-interface HealthStatus {
-    status: 'healthy' | 'degraded' | 'unhealthy';
-    details: Record<string, any>;
-    timestamp: Date;
+interface ScheduleStats {
+    total: number; // Total managed schedules
+    active: number; // Currently active schedules
+    inactive: number; // Paused schedules
+    errors: number; // Schedules with errors
 }
 ```
 
-### Result Interfaces
+#### `DiscoveryStats`
 
-#### `WorkflowStartResult<T>`
-
-Workflow start result interface.
+Discovery statistics.
 
 ```typescript
-interface WorkflowStartResult<T> {
-    workflowId: string;
-    runId: string;
-    result: Promise<T>;
+interface DiscoveryStats {
+    controllers: number; // Workflow controllers discovered
+    methods: number; // Workflow methods discovered
+    scheduled: number; // Scheduled workflows discovered
+    signals: number; // Signal methods discovered
+    queries: number; // Query methods discovered
 }
 ```
 
@@ -818,7 +817,7 @@ interface WorkflowStartResult<T> {
 
 ### CRON_EXPRESSIONS
 
-Predefined cron expressions for common schedules.
+Predefined cron expressions.
 
 ```typescript
 import { CRON_EXPRESSIONS } from 'nestjs-temporal-core';
@@ -826,7 +825,8 @@ import { CRON_EXPRESSIONS } from 'nestjs-temporal-core';
 @Cron(CRON_EXPRESSIONS.DAILY_8AM, { scheduleId: 'morning-report' })
 ```
 
-Available expressions:
+**Available expressions:**
+
 - `EVERY_MINUTE = '* * * * *'`
 - `EVERY_5_MINUTES = '*/5 * * * *'`
 - `HOURLY = '0 * * * *'`
@@ -845,7 +845,8 @@ import { INTERVAL_EXPRESSIONS } from 'nestjs-temporal-core';
 @Interval(INTERVAL_EXPRESSIONS.EVERY_5_MINUTES, { scheduleId: 'health-check' })
 ```
 
-Available intervals:
+**Available intervals:**
+
 - `EVERY_MINUTE = '1m'`
 - `EVERY_5_MINUTES = '5m'`
 - `EVERY_30_MINUTES = '30m'`
@@ -859,13 +860,15 @@ Predefined worker configurations.
 ```typescript
 import { WORKER_PRESETS } from 'nestjs-temporal-core';
 
-workerOptions: WORKER_PRESETS.PRODUCTION_BALANCED
+workerOptions: WORKER_PRESETS.PRODUCTION_BALANCED;
 ```
 
-Available presets:
+**Available presets:**
+
 - `DEVELOPMENT` - Development-optimized settings
 - `PRODUCTION_BALANCED` - Balanced production settings
-- `PRODUCTION_HIGH_THROUGHPUT` - High-throughput production settings
+- `PRODUCTION_HIGH_THROUGHPUT` - High-throughput settings
+- `PRODUCTION_MINIMAL` - Resource-constrained settings
 
 ### RETRY_POLICIES
 
@@ -874,10 +877,17 @@ Predefined retry policies.
 ```typescript
 import { RETRY_POLICIES } from 'nestjs-temporal-core';
 
-// In activity configuration
-startToCloseTimeout: '30s',
-retry: RETRY_POLICIES.AGGRESSIVE
+const activities = proxyActivities<MyActivities>({
+    retry: RETRY_POLICIES.AGGRESSIVE,
+});
 ```
+
+**Available policies:**
+
+- `QUICK` - Fast retry for transient failures
+- `STANDARD` - Standard retry policy
+- `AGGRESSIVE` - Maximum retry attempts
+- `CONSERVATIVE` - Conservative retry for expensive operations
 
 ### TIMEOUTS
 
@@ -886,34 +896,64 @@ Common timeout values.
 ```typescript
 import { TIMEOUTS } from 'nestjs-temporal-core';
 
-startToCloseTimeout: TIMEOUTS.ACTIVITY_MEDIUM
+const activities = proxyActivities<MyActivities>({
+    startToCloseTimeout: TIMEOUTS.ACTIVITY_MEDIUM,
+});
 ```
 
-## Types
+## Discovery Services
 
-### Duration Type
+### WorkflowDiscoveryService
 
-```typescript
-type Duration = string; // e.g., '30s', '5m', '1h', '2d'
-```
+Service for discovering workflow controllers and methods.
 
-### TaskQueue Type
+#### Methods
 
-```typescript
-type TaskQueue = string;
-```
+##### `getWorkflowControllers(): WorkflowControllerInfo[]`
 
-### WorkflowId Type
+Get all discovered workflow controllers.
 
-```typescript
-type WorkflowId = string;
-```
+##### `getWorkflowNames(): string[]`
 
-## Error Classes
+Get all workflow names.
 
-### TemporalError
+##### `hasWorkflow(name: string): boolean`
 
-Base error class for all Temporal-related errors.
+Check if a workflow exists.
+
+##### `getStats(): DiscoveryStats`
+
+Get discovery statistics.
+
+### ScheduleManagerService
+
+Service for managing discovered scheduled workflows.
+
+#### Methods
+
+##### `getManagedSchedules(): string[]`
+
+Get all managed schedule IDs.
+
+##### `getScheduleStats(): ScheduleStats`
+
+Get schedule statistics.
+
+##### `isScheduleManaged(scheduleId: string): boolean`
+
+Check if a schedule is managed.
+
+##### `retryFailedSetups(): Promise<void>`
+
+Retry failed schedule setups.
+
+## Error Handling
+
+### Error Classes
+
+#### `TemporalError`
+
+Base error class.
 
 ```typescript
 class TemporalError extends Error {
@@ -921,46 +961,35 @@ class TemporalError extends Error {
 }
 ```
 
-### WorkflowNotFoundError
+#### `WorkflowNotFoundError`
 
 Thrown when a workflow is not found.
 
-```typescript
-class WorkflowNotFoundError extends TemporalError {
-    constructor(workflowName: string);
-}
-```
-
-### WorkerNotAvailableError
+#### `WorkerNotAvailableError`
 
 Thrown when worker operations are attempted without a worker.
 
-```typescript
-class WorkerNotAvailableError extends TemporalError {
-    constructor(operation: string);
-}
-```
-
-### ScheduleNotFoundError
+#### `ScheduleNotFoundError`
 
 Thrown when a schedule is not found.
 
-```typescript
-class ScheduleNotFoundError extends TemporalError {
-    constructor(scheduleId: string);
-}
-```
+#### `ConfigurationError`
 
-### ConfigurationError
+Thrown for configuration issues.
 
-Thrown for configuration-related issues.
+### Error Constants
 
 ```typescript
-class ConfigurationError extends TemporalError {
-    constructor(message: string, field?: string);
-}
+import { ERRORS } from 'nestjs-temporal-core';
+
+// Common error messages
+ERRORS.CLIENT_NOT_INITIALIZED;
+ERRORS.WORKER_NOT_INITIALIZED;
+ERRORS.MISSING_TASK_QUEUE;
+ERRORS.WORKFLOW_NOT_FOUND;
+ERRORS.SCHEDULE_NOT_FOUND;
 ```
 
 ---
 
-**[← Configuration](./configuration.md)** | **[🍳 Examples →](./examples.md)**
+**[← Configuration](./configuration.md)** | **[Examples →](./examples.md)**
