@@ -10,6 +10,10 @@ A comprehensive NestJS integration for [Temporal.io](https://temporal.io/) that 
 
 NestJS Temporal Core brings Temporal's durable execution to NestJS with familiar decorator patterns and automatic discovery. Build reliable distributed systems with activities and scheduled tasks using native NestJS conventions.
 
+## 💡 Example Repository
+
+🔗 **[Complete Example Project](https://github.com/harsh-simform/nestjs-temporal-core-example)** - Check out our full working example repository to see NestJS Temporal Core in action with real-world use cases, configuration examples, and best practices.
+
 ## 🚀 Key Features
 
 - **🎯 NestJS-Native** - Familiar patterns: `@Activity`, `@Cron`, `@Interval`
