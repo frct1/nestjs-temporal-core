@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { TEMPORAL_ACTIVITY, TEMPORAL_ACTIVITY_METHOD } from 'src/constants';
-import { ActivityMetadata, ActivityMethodHandler, ActivityMethodMetadata } from 'src/interfaces';
+import { TEMPORAL_ACTIVITY, TEMPORAL_ACTIVITY_METHOD } from '../constants';
+import { ActivityMetadata, ActivityMethodHandler, ActivityMethodMetadata } from '../interfaces';
 
 /**
  * Streamlined Temporal Metadata Accessor

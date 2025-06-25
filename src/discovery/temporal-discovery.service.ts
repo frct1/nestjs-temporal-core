@@ -7,7 +7,7 @@ import {
     TEMPORAL_SIGNAL_METHOD,
     TEMPORAL_WORKFLOW_CONTROLLER,
     TEMPORAL_WORKFLOW_METHOD,
-} from 'src/constants';
+} from '../constants';
 import {
     DiscoveryStats,
     QueryMethodHandler,
@@ -18,7 +18,7 @@ import {
     WorkflowControllerInfo,
     WorkflowMethodHandler,
     WorkflowMethodInfo,
-} from 'src/interfaces';
+} from '../interfaces';
 
 /**
  * Streamlined Workflow Discovery Service

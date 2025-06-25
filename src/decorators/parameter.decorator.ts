@@ -1,6 +1,6 @@
 import { createParamDecorator, ExecutionContext } from '@nestjs/common';
-import { WORKFLOW_PARAMS_METADATA } from 'src/constants';
-import { WorkflowParameterMetadata } from 'src/interfaces';
+import { WORKFLOW_PARAMS_METADATA } from '../constants';
+import { WorkflowParameterMetadata } from '../interfaces';
 
 /**
  * Extracts workflow parameters

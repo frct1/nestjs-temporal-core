@@ -77,6 +77,16 @@ export {
 } from './constants';
 
 // ==========================================
+// Core Temporal Service
+// ==========================================
+export * from './temporal.service';
+
+// ==========================================
+// Core Temporal Module
+// ==========================================
+export * from './temporal.module';
+
+// ==========================================
 // Re-export Temporal SDK Types for Convenience
 // ==========================================
 export type { RetryPolicy, Duration, SearchAttributes } from '@temporalio/common';

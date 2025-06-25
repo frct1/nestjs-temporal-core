@@ -4,13 +4,13 @@ import {
     TEMPORAL_SIGNAL_METHOD,
     TEMPORAL_WORKFLOW_CONTROLLER,
     TEMPORAL_WORKFLOW_METHOD,
-} from 'src/constants';
+} from '../constants';
 import {
     QueryOptions,
     SignalOptions,
     WorkflowControllerOptions,
     WorkflowMethodOptions,
-} from 'src/interfaces';
+} from '../interfaces';
 
 /**
  * Marks a class as a Temporal Workflow Controller

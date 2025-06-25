@@ -1,6 +1,6 @@
 import { SetMetadata } from '@nestjs/common';
-import { TEMPORAL_ACTIVITY, TEMPORAL_ACTIVITY_METHOD } from 'src/constants';
-import { ActivityMethodOptions, ActivityOptions } from 'src/interfaces';
+import { TEMPORAL_ACTIVITY, TEMPORAL_ACTIVITY_METHOD } from '../constants';
+import { ActivityMethodOptions, ActivityOptions } from '../interfaces';
 
 /**
  * Decorator that marks a class as a Temporal Activity

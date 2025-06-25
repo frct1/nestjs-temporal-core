@@ -1,7 +1,7 @@
 import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
-import { ScheduledMethodInfo, ScheduleStats, ScheduleStatus } from 'src/interfaces';
+import { ScheduledMethodInfo, ScheduleStats, ScheduleStatus } from '../interfaces';
 import { TemporalDiscoveryService } from './temporal-discovery.service';
-import { TemporalScheduleService } from 'src/client';
+import { TemporalScheduleService } from '../client';
 
 /**
  * Streamlined Schedule Manager Service

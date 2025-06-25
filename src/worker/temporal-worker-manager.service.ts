@@ -9,8 +9,8 @@ import {
 import { DiscoveryService } from '@nestjs/core';
 import { NativeConnection, Worker } from '@temporalio/worker';
 import { TemporalMetadataAccessor } from './temporal-metadata.accessor';
-import { DEFAULT_NAMESPACE, ERRORS, TEMPORAL_MODULE_OPTIONS, WORKER_PRESETS } from 'src/constants';
-import { ActivityMethodHandler, WorkerCreateOptions, WorkerStatus } from 'src/interfaces';
+import { DEFAULT_NAMESPACE, ERRORS, TEMPORAL_MODULE_OPTIONS, WORKER_PRESETS } from '../constants';
+import { ActivityMethodHandler, WorkerCreateOptions, WorkerStatus } from '../interfaces';
 
 /**
  * Streamlined Temporal Worker Manager Service

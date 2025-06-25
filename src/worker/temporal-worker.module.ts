@@ -1,8 +1,8 @@
 import { DynamicModule, Module, Provider, Type } from '@nestjs/common';
 import { DiscoveryService } from '@nestjs/core';
 import { TemporalMetadataAccessor } from './temporal-metadata.accessor';
-import { ERRORS, TEMPORAL_MODULE_OPTIONS } from 'src/constants';
-import { TemporalAsyncOptions, TemporalOptions, TemporalOptionsFactory } from 'src/interfaces';
+import { ERRORS, TEMPORAL_MODULE_OPTIONS } from '../constants';
+import { TemporalAsyncOptions, TemporalOptions, TemporalOptionsFactory } from '../interfaces';
 import { TemporalWorkerManagerService } from './temporal-worker-manager.service';
 
 /**

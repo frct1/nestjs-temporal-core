@@ -7,8 +7,8 @@ import {
     Provider,
 } from '@nestjs/common';
 import { Client, Connection } from '@temporalio/client';
-import { TemporalAsyncOptions, TemporalOptions, TemporalOptionsFactory } from 'src/interfaces';
-import { DEFAULT_NAMESPACE, ERRORS, TEMPORAL_CLIENT, TEMPORAL_MODULE_OPTIONS } from 'src/constants';
+import { TemporalAsyncOptions, TemporalOptions, TemporalOptionsFactory } from '../interfaces';
+import { DEFAULT_NAMESPACE, ERRORS, TEMPORAL_CLIENT, TEMPORAL_MODULE_OPTIONS } from '../constants';
 import { TemporalClientService } from './temporal-client.service';
 import { TemporalScheduleService } from './temporal-schedule.service';
 

@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Client, WorkflowClient, WorkflowHandle } from '@temporalio/client';
-import { ERRORS, TEMPORAL_CLIENT } from 'src/constants';
-import { StartWorkflowOptions } from 'src/interfaces';
+import { ERRORS, TEMPORAL_CLIENT } from '../constants';
+import { StartWorkflowOptions } from '../interfaces';
 
 /**
  * Streamlined Temporal Client Service
