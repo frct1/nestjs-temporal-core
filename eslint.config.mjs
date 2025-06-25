@@ -1,4 +1,3 @@
-import js from '@eslint/js';
 import typescript from '@typescript-eslint/eslint-plugin';
 import typescriptParser from '@typescript-eslint/parser';
 import prettier from 'eslint-plugin-prettier';
@@ -6,18 +5,23 @@ import prettierConfig from 'eslint-config-prettier';
 import globals from 'globals';
 
 export default [
-    // Apply to all TypeScript files
+    // Global ignores
     {
-        files: ['**/*.ts', '**/*.tsx'],
+        ignores: ['dist/**', 'node_modules/**', 'coverage/**', '.nyc_output/**', '*.js', '*.mjs'],
+    },
+
+    // TypeScript files
+    {
+        files: ['**/*.ts'],
         languageOptions: {
             parser: typescriptParser,
             parserOptions: {
-                project: './tsconfig.json',
+                ecmaVersion: 2022,
                 sourceType: 'module',
             },
             globals: {
                 ...globals.node,
-                ...globals.jest,
+                ...globals.es2022,
             },
         },
         plugins: {
@@ -25,13 +29,13 @@ export default [
             prettier: prettier,
         },
         rules: {
-            // Extend recommended configurations
-            ...js.configs.recommended.rules,
-            ...typescript.configs.recommended.rules,
-            ...prettierConfig.rules,
+            // Base ESLint rules
+            'no-unused-vars': 'off',
+            'no-undef': 'off',
+            'prefer-const': 'error',
+            'no-var': 'error',
 
-            // TypeScript specific rules
-            '@typescript-eslint/no-explicit-any': 'off',
+            // TypeScript ESLint rules (only commonly available ones)
             '@typescript-eslint/no-unused-vars': [
                 'warn',
                 {
@@ -39,39 +43,27 @@ export default [
                     varsIgnorePattern: '^_',
                 },
             ],
+            '@typescript-eslint/no-explicit-any': 'warn',
+            '@typescript-eslint/no-empty-function': 'warn',
             '@typescript-eslint/explicit-function-return-type': 'off',
             '@typescript-eslint/explicit-module-boundary-types': 'off',
-            '@typescript-eslint/no-empty-function': 'warn',
             '@typescript-eslint/ban-types': 'off',
-            '@typescript-eslint/no-empty-interface': 'warn',
 
-            // Prettier integration
-            'prettier/prettier': [
-                'warn',
-                {
-                    endOfLine: 'auto',
-                },
-            ],
+            // Prettier
+            'prettier/prettier': ['warn', { endOfLine: 'auto' }],
         },
     },
 
-    // Test file overrides
+    // Test files
     {
-        files: ['**/*.spec.ts', '**/*.test.ts'],
+        files: ['**/*.test.ts', '**/*.spec.ts'],
         rules: {
+            '@typescript-eslint/no-explicit-any': 'off',
             '@typescript-eslint/no-empty-function': 'off',
             '@typescript-eslint/no-unused-vars': 'off',
         },
     },
 
-    // Ignore patterns (replaces .eslintignore)
-    {
-        ignores: [
-            'dist/**',
-            'node_modules/**',
-            'coverage/**',
-            '.nyc_output/**',
-            '*.js', // Ignore JS files at root level like this config file
-        ],
-    },
+    // Apply Prettier config last to disable conflicting rules
+    prettierConfig,
 ];

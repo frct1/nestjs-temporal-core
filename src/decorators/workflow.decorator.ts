@@ -1,15 +1,15 @@
 import { SetMetadata } from '@nestjs/common';
 import {
+    TEMPORAL_QUERY_METHOD,
+    TEMPORAL_SIGNAL_METHOD,
     TEMPORAL_WORKFLOW_CONTROLLER,
     TEMPORAL_WORKFLOW_METHOD,
-    TEMPORAL_SIGNAL_METHOD,
-    TEMPORAL_QUERY_METHOD,
 } from 'src/constants';
 import {
+    QueryOptions,
+    SignalOptions,
     WorkflowControllerOptions,
     WorkflowMethodOptions,
-    SignalOptions,
-    QueryOptions,
 } from 'src/interfaces';
 
 /**

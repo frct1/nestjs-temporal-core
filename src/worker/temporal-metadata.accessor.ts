@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { TEMPORAL_ACTIVITY, TEMPORAL_ACTIVITY_METHOD } from 'src/constants';
-import { ActivityMetadata, ActivityMethodMetadata, ActivityMethodHandler } from 'src/interfaces';
+import { ActivityMetadata, ActivityMethodHandler, ActivityMethodMetadata } from 'src/interfaces';
 
 /**
  * Streamlined Temporal Metadata Accessor
@@ -109,7 +109,7 @@ export class TemporalMetadataAccessor {
             return new Map();
         }
 
-        const constructor = instance.constructor;
+        const { constructor } = instance;
 
         // Check cache first
         if (this.activityMethodCache.has(constructor)) {
@@ -147,7 +147,7 @@ export class TemporalMetadataAccessor {
                 if (metadata && metadata.originalName === methodName) {
                     return {
                         ...metadata,
-                        handler: handler, // This is already bound
+                        handler, // This is already bound
                     };
                 }
             }
@@ -170,7 +170,7 @@ export class TemporalMetadataAccessor {
         }
 
         // Extract methods from prototype without creating instance
-        const prototype = target.prototype;
+        const { prototype } = target;
         if (!prototype) {
             return [];
         }

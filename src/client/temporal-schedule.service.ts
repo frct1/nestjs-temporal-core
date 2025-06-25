@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Client, ScheduleClient, ScheduleHandle, ScheduleOverlapPolicy } from '@temporalio/client';
 import { StringValue } from '@temporalio/common';
-import { TEMPORAL_CLIENT, ERRORS } from 'src/constants';
+import { ERRORS, TEMPORAL_CLIENT } from 'src/constants';
 
 /**
  * Streamlined Temporal Schedule Service

@@ -1,7 +1,7 @@
 import { DynamicModule, Module } from '@nestjs/common';
 import { DiscoveryService, MetadataScanner } from '@nestjs/core';
 import { TemporalService } from './temporal.service';
-import { TemporalOptions, TemporalAsyncOptions, TemporalOptionsFactory } from './interfaces';
+import { TemporalAsyncOptions, TemporalOptions, TemporalOptionsFactory } from './interfaces';
 import { DEFAULT_TASK_QUEUE, ERRORS } from './constants';
 import { TemporalClientModule } from './client';
 import { TemporalWorkerModule } from './worker';
@@ -371,13 +371,13 @@ export class TemporalModule {
 
         if (configMethods === 0) {
             throw new Error(
-                ERRORS.INVALID_OPTIONS + ': Must provide useFactory, useClass, or useExisting',
+                `${ERRORS.INVALID_OPTIONS}: Must provide useFactory, useClass, or useExisting`,
             );
         }
 
         if (configMethods > 1) {
             throw new Error(
-                ERRORS.INVALID_OPTIONS + ': Cannot provide multiple configuration methods',
+                `${ERRORS.INVALID_OPTIONS}: Cannot provide multiple configuration methods`,
             );
         }
     }

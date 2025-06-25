@@ -1,6 +1,6 @@
 import { SetMetadata } from '@nestjs/common';
 import { TEMPORAL_SCHEDULED_WORKFLOW } from 'src/constants';
-import { ScheduledOptions, CronOptions, IntervalOptions } from 'src/interfaces';
+import { CronOptions, IntervalOptions, ScheduledOptions } from 'src/interfaces';
 
 /**
  * Marks a workflow method as scheduled

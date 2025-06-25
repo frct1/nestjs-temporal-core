@@ -1,14 +1,14 @@
 import {
     DynamicModule,
     Global,
-    Module,
-    Provider,
-    OnApplicationShutdown,
     Logger,
+    Module,
+    OnApplicationShutdown,
+    Provider,
 } from '@nestjs/common';
 import { Client, Connection } from '@temporalio/client';
-import { TemporalOptions, TemporalAsyncOptions, TemporalOptionsFactory } from 'src/interfaces';
-import { TEMPORAL_CLIENT, TEMPORAL_MODULE_OPTIONS, DEFAULT_NAMESPACE, ERRORS } from 'src/constants';
+import { TemporalAsyncOptions, TemporalOptions, TemporalOptionsFactory } from 'src/interfaces';
+import { DEFAULT_NAMESPACE, ERRORS, TEMPORAL_CLIENT, TEMPORAL_MODULE_OPTIONS } from 'src/constants';
 import { TemporalClientService } from './temporal-client.service';
 import { TemporalScheduleService } from './temporal-schedule.service';
 

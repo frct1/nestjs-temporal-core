@@ -61,7 +61,7 @@ export class TemporalScheduleManagerService implements OnApplicationBootstrap, O
      */
     private async setupSingleSchedule(scheduled: ScheduledMethodInfo): Promise<void> {
         const { scheduleOptions, workflowName } = scheduled;
-        const scheduleId = scheduleOptions.scheduleId;
+        const { scheduleId } = scheduleOptions;
 
         // Prevent duplicate setup attempts
         if (this.setupPromises.has(scheduleId)) {
@@ -89,7 +89,7 @@ export class TemporalScheduleManagerService implements OnApplicationBootstrap, O
      */
     private async performScheduleSetup(scheduled: ScheduledMethodInfo): Promise<void> {
         const { scheduleOptions, workflowName, controllerInfo } = scheduled;
-        const scheduleId = scheduleOptions.scheduleId;
+        const { scheduleId } = scheduleOptions;
 
         // Check if auto-start is disabled
         if (scheduleOptions.autoStart === false) {

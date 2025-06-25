@@ -1,13 +1,13 @@
-import { Injectable, OnModuleInit, Logger, Optional } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit, Optional } from '@nestjs/common';
 import { DEFAULT_TASK_QUEUE } from './constants';
 import {
-    StartWorkflowOptions,
     DiscoveryStats,
-    ScheduleStats,
-    WorkflowMethodInfo,
     ScheduledMethodInfo,
-    WorkerStatus,
+    ScheduleStats,
+    StartWorkflowOptions,
     SystemStatus,
+    WorkerStatus,
+    WorkflowMethodInfo,
 } from './interfaces';
 import { TemporalClientService, TemporalScheduleService } from './client';
 import { TemporalDiscoveryService, TemporalScheduleManagerService } from './discovery';
