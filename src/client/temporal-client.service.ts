@@ -1,8 +1,12 @@
 import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Client, WorkflowClient, WorkflowHandle } from '@temporalio/client';
-import { TEMPORAL_CLIENT, ERRORS } from '../constants';
+import { TEMPORAL_CLIENT, ERRORS } from 'src/constants';
 import { StartWorkflowOptions } from 'src/interfaces';
 
+/**
+ * Streamlined Temporal Client Service
+ * Handles all workflow operations: start, signal, query, terminate, cancel
+ */
 @Injectable()
 export class TemporalClientService implements OnModuleInit {
     private readonly logger = new Logger(TemporalClientService.name);
@@ -23,22 +27,12 @@ export class TemporalClientService implements OnModuleInit {
         }
     }
 
-    /**
-     * Get the Temporal workflow client instance
-     */
-    getWorkflowClient(): WorkflowClient | null {
-        return this.workflowClient;
-    }
+    // ==========================================
+    // Core Workflow Operations
+    // ==========================================
 
     /**
-     * Get the raw Temporal client instance
-     */
-    getRawClient(): Client | null {
-        return this.client;
-    }
-
-    /**
-     * Start a workflow execution with enhanced options
+     * Start a workflow execution
      */
     async startWorkflow<T, A extends any[]>(
         workflowType: string,
@@ -160,6 +154,10 @@ export class TemporalClientService implements OnModuleInit {
         }
     }
 
+    // ==========================================
+    // Workflow Information & Management
+    // ==========================================
+
     /**
      * Get a workflow handle for a running workflow
      */
@@ -205,6 +203,52 @@ export class TemporalClientService implements OnModuleInit {
             throw new Error(errorMsg);
         }
     }
+
+    // ==========================================
+    // Client Access & Health
+    // ==========================================
+
+    /**
+     * Get the Temporal workflow client instance
+     */
+    getWorkflowClient(): WorkflowClient | null {
+        return this.workflowClient;
+    }
+
+    /**
+     * Get the raw Temporal client instance
+     */
+    getRawClient(): Client | null {
+        return this.client;
+    }
+
+    /**
+     * Check if client is available and healthy
+     */
+    isHealthy(): boolean {
+        return Boolean(this.client && this.workflowClient);
+    }
+
+    /**
+     * Get client status for monitoring
+     */
+    getStatus(): {
+        available: boolean;
+        healthy: boolean;
+        connection?: string;
+        namespace?: string;
+    } {
+        return {
+            available: Boolean(this.client),
+            healthy: this.isHealthy(),
+            // Note: Connection details would need to be stored during initialization
+            // This is a simplified version
+        };
+    }
+
+    // ==========================================
+    // Private Helper Methods
+    // ==========================================
 
     /**
      * Ensure client is initialized before performing operations

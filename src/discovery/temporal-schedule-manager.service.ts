@@ -1,26 +1,27 @@
 import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
-import { TemporalScheduleService } from '../client/temporal-schedule.service';
-import { WorkflowDiscoveryService } from './workflow-discovery.service';
-import { LOG_CATEGORIES } from '../constants';
-import { ScheduledMethodInfo, ScheduleStatus, ScheduleStats } from '../interfaces';
+import { ScheduledMethodInfo, ScheduleStats, ScheduleStatus } from 'src/interfaces';
+import { TemporalDiscoveryService } from './temporal-discovery.service';
+import { TemporalScheduleService } from 'src/client';
 
 /**
- * Enhanced service for managing scheduled workflows discovered through decorators
- * Provides comprehensive schedule lifecycle management with better error handling and monitoring
+ * Streamlined Schedule Manager Service
+ * Manages scheduled workflows discovered through decorators
  */
 @Injectable()
-export class ScheduleManagerService implements OnApplicationBootstrap, OnModuleDestroy {
-    private readonly logger = new Logger(LOG_CATEGORIES.SCHEDULE);
+export class TemporalScheduleManagerService implements OnApplicationBootstrap, OnModuleDestroy {
+    private readonly logger = new Logger(TemporalScheduleManagerService.name);
+
+    // Track managed schedules and their status
     private readonly managedSchedules = new Map<string, ScheduleStatus>();
     private readonly setupPromises = new Map<string, Promise<void>>();
 
     constructor(
-        private readonly workflowDiscovery: WorkflowDiscoveryService,
+        private readonly discoveryService: TemporalDiscoveryService,
         private readonly scheduleService: TemporalScheduleService,
     ) {}
 
     async onApplicationBootstrap() {
-        await this.setupScheduledWorkflows();
+        await this.setupDiscoveredSchedules();
     }
 
     async onModuleDestroy() {
@@ -29,11 +30,15 @@ export class ScheduleManagerService implements OnApplicationBootstrap, OnModuleD
         // Only log the shutdown, don't delete schedules
     }
 
+    // ==========================================
+    // Schedule Setup Process
+    // ==========================================
+
     /**
-     * Set up all discovered scheduled workflows with enhanced error handling
+     * Set up all discovered scheduled workflows
      */
-    private async setupScheduledWorkflows(): Promise<void> {
-        const scheduledWorkflows = this.workflowDiscovery.getScheduledWorkflows();
+    private async setupDiscoveredSchedules(): Promise<void> {
+        const scheduledWorkflows = this.discoveryService.getScheduledWorkflows();
 
         if (scheduledWorkflows.length === 0) {
             this.logger.log('No scheduled workflows found');
@@ -44,7 +49,7 @@ export class ScheduleManagerService implements OnApplicationBootstrap, OnModuleD
 
         // Process schedules concurrently with individual error handling
         const setupPromises = scheduledWorkflows.map((scheduled) =>
-            this.setupScheduleWithErrorHandling(scheduled),
+            this.setupSingleSchedule(scheduled),
         );
 
         const results = await Promise.allSettled(setupPromises);
@@ -52,9 +57,9 @@ export class ScheduleManagerService implements OnApplicationBootstrap, OnModuleD
     }
 
     /**
-     * Set up a single scheduled workflow with comprehensive error handling
+     * Set up a single scheduled workflow with error handling
      */
-    private async setupScheduleWithErrorHandling(scheduled: ScheduledMethodInfo): Promise<void> {
+    private async setupSingleSchedule(scheduled: ScheduledMethodInfo): Promise<void> {
         const { scheduleOptions, workflowName } = scheduled;
         const scheduleId = scheduleOptions.scheduleId;
 
@@ -64,12 +69,13 @@ export class ScheduleManagerService implements OnApplicationBootstrap, OnModuleD
             return;
         }
 
-        const setupPromise = this.setupSchedule(scheduled);
+        const setupPromise = this.performScheduleSetup(scheduled);
         this.setupPromises.set(scheduleId, setupPromise);
 
         try {
             await setupPromise;
             this.updateScheduleStatus(scheduleId, workflowName, true, true);
+            this.logger.debug(`Successfully set up schedule: ${scheduleId}`);
         } catch (error) {
             this.updateScheduleStatus(scheduleId, workflowName, false, false, error.message);
             this.logger.error(`Failed to setup schedule ${scheduleId}: ${error.message}`);
@@ -79,9 +85,9 @@ export class ScheduleManagerService implements OnApplicationBootstrap, OnModuleD
     }
 
     /**
-     * Set up a single scheduled workflow
+     * Perform the actual schedule setup
      */
-    private async setupSchedule(scheduled: ScheduledMethodInfo): Promise<void> {
+    private async performScheduleSetup(scheduled: ScheduledMethodInfo): Promise<void> {
         const { scheduleOptions, workflowName, controllerInfo } = scheduled;
         const scheduleId = scheduleOptions.scheduleId;
 
@@ -93,7 +99,7 @@ export class ScheduleManagerService implements OnApplicationBootstrap, OnModuleD
         }
 
         // Check if schedule already exists
-        if (await this.scheduleExists(scheduleId)) {
+        if (await this.scheduleService.scheduleExists(scheduleId)) {
             this.logger.debug(`Schedule ${scheduleId} already exists, skipping creation`);
             this.updateScheduleStatus(scheduleId, workflowName, true, true, 'Already exists');
             return;
@@ -127,14 +133,18 @@ export class ScheduleManagerService implements OnApplicationBootstrap, OnModuleD
     ): Promise<void> {
         const { scheduleOptions, workflowName } = scheduled;
 
-        await this.scheduleService.createCronWorkflow(
+        await this.scheduleService.createCronSchedule(
             scheduleOptions.scheduleId,
             workflowName,
             scheduleOptions.cron,
             taskQueue,
             [], // Arguments can be enhanced in future versions
-            scheduleOptions.description,
-            scheduleOptions.timezone,
+            {
+                description: scheduleOptions.description,
+                timezone: scheduleOptions.timezone,
+                overlapPolicy: scheduleOptions.overlapPolicy,
+                startPaused: scheduleOptions.startPaused,
+            },
         );
 
         this.logger.log(
@@ -151,13 +161,17 @@ export class ScheduleManagerService implements OnApplicationBootstrap, OnModuleD
     ): Promise<void> {
         const { scheduleOptions, workflowName } = scheduled;
 
-        await this.scheduleService.createIntervalWorkflow(
+        await this.scheduleService.createIntervalSchedule(
             scheduleOptions.scheduleId,
             workflowName,
             scheduleOptions.interval,
             taskQueue,
             [], // Arguments can be enhanced in future versions
-            scheduleOptions.description,
+            {
+                description: scheduleOptions.description,
+                overlapPolicy: scheduleOptions.overlapPolicy,
+                startPaused: scheduleOptions.startPaused,
+            },
         );
 
         this.logger.log(
@@ -165,71 +179,8 @@ export class ScheduleManagerService implements OnApplicationBootstrap, OnModuleD
         );
     }
 
-    /**
-     * Check if a schedule already exists
-     */
-    private async scheduleExists(scheduleId: string): Promise<boolean> {
-        try {
-            const existingSchedules = await this.scheduleService.listSchedules();
-            return existingSchedules.some((s) => s.scheduleId === scheduleId);
-        } catch (error) {
-            this.logger.warn(`Failed to check existing schedules: ${error.message}`);
-            return false;
-        }
-    }
-
-    /**
-     * Resolve the task queue for a schedule
-     */
-    private resolveTaskQueue(scheduleOptions: any, controllerInfo: any): string {
-        return scheduleOptions.taskQueue || controllerInfo.taskQueue || 'default';
-    }
-
-    /**
-     * Update schedule status tracking
-     */
-    private updateScheduleStatus(
-        scheduleId: string,
-        workflowName: string,
-        isManaged: boolean,
-        isActive: boolean,
-        error?: string,
-    ): void {
-        const existing = this.managedSchedules.get(scheduleId);
-        const now = new Date();
-
-        this.managedSchedules.set(scheduleId, {
-            scheduleId,
-            workflowName,
-            isManaged,
-            isActive,
-            lastError: error,
-            createdAt: existing?.createdAt || now,
-            lastUpdatedAt: now,
-        });
-    }
-
-    /**
-     * Log setup results with summary
-     */
-    private logSetupResults(
-        results: PromiseSettledResult<void>[],
-        scheduledWorkflows: ScheduledMethodInfo[],
-    ): void {
-        const successful = results.filter((r) => r.status === 'fulfilled').length;
-        const failed = results.filter((r) => r.status === 'rejected').length;
-
-        this.logger.log(
-            `Schedule setup completed: ${successful} successful, ${failed} failed out of ${scheduledWorkflows.length} total`,
-        );
-
-        if (failed > 0) {
-            this.logger.warn(`${failed} schedules failed to setup. Check logs for details.`);
-        }
-    }
-
     // ==========================================
-    // Public API Methods
+    // Schedule Management Operations
     // ==========================================
 
     /**
@@ -237,7 +188,7 @@ export class ScheduleManagerService implements OnApplicationBootstrap, OnModuleD
      */
     async triggerSchedule(scheduleId: string): Promise<void> {
         this.ensureScheduleManaged(scheduleId);
-        await this.scheduleService.triggerNow(scheduleId);
+        await this.scheduleService.triggerSchedule(scheduleId);
         this.logger.log(`Triggered schedule: ${scheduleId}`);
     }
 
@@ -269,12 +220,47 @@ export class ScheduleManagerService implements OnApplicationBootstrap, OnModuleD
     /**
      * Delete a managed schedule (use with caution)
      */
-    async deleteSchedule(scheduleId: string): Promise<void> {
+    async deleteSchedule(scheduleId: string, force = false): Promise<void> {
         this.ensureScheduleManaged(scheduleId);
+
+        if (!force) {
+            this.logger.warn(
+                `Deleting schedule ${scheduleId} requires force=true. This action cannot be undone.`,
+            );
+            throw new Error('Schedule deletion requires force=true confirmation');
+        }
+
         await this.scheduleService.deleteSchedule(scheduleId);
         this.managedSchedules.delete(scheduleId);
         this.logger.log(`Deleted schedule: ${scheduleId}`);
     }
+
+    /**
+     * Retry failed schedule setups
+     */
+    async retryFailedSetups(): Promise<void> {
+        const failedSchedules = this.discoveryService
+            .getScheduledWorkflows()
+            .filter((scheduled) => {
+                const status = this.managedSchedules.get(scheduled.scheduleOptions.scheduleId);
+                return !status || !status.isManaged;
+            });
+
+        if (failedSchedules.length === 0) {
+            this.logger.log('No failed schedules to retry');
+            return;
+        }
+
+        this.logger.log(`Retrying ${failedSchedules.length} failed schedule setups`);
+
+        for (const scheduled of failedSchedules) {
+            await this.setupSingleSchedule(scheduled);
+        }
+    }
+
+    // ==========================================
+    // Information & Status Methods
+    // ==========================================
 
     /**
      * Get all managed schedule IDs
@@ -326,26 +312,29 @@ export class ScheduleManagerService implements OnApplicationBootstrap, OnModuleD
     }
 
     /**
-     * Retry failed schedule setups
+     * Get health status for monitoring
      */
-    async retryFailedSetups(): Promise<void> {
-        const failedSchedules = this.workflowDiscovery
-            .getScheduledWorkflows()
-            .filter((scheduled) => {
-                const status = this.managedSchedules.get(scheduled.scheduleOptions.scheduleId);
-                return !status || !status.isManaged;
-            });
+    getHealthStatus(): {
+        status: 'healthy' | 'degraded' | 'unhealthy';
+        managedSchedules: number;
+        activeSchedules: number;
+        errorCount: number;
+    } {
+        const stats = this.getScheduleStats();
 
-        if (failedSchedules.length === 0) {
-            this.logger.log('No failed schedules to retry');
-            return;
+        let status: 'healthy' | 'degraded' | 'unhealthy';
+        if (stats.errors > 0) {
+            status = stats.errors === stats.total ? 'unhealthy' : 'degraded';
+        } else {
+            status = 'healthy';
         }
 
-        this.logger.log(`Retrying ${failedSchedules.length} failed schedule setups`);
-
-        for (const scheduled of failedSchedules) {
-            await this.setupScheduleWithErrorHandling(scheduled);
-        }
+        return {
+            status,
+            managedSchedules: stats.total,
+            activeSchedules: stats.active,
+            errorCount: stats.errors,
+        };
     }
 
     // ==========================================
@@ -353,11 +342,63 @@ export class ScheduleManagerService implements OnApplicationBootstrap, OnModuleD
     // ==========================================
 
     /**
+     * Resolve the task queue for a schedule
+     */
+    private resolveTaskQueue(scheduleOptions: any, controllerInfo: any): string {
+        return scheduleOptions.taskQueue || controllerInfo.taskQueue || 'default';
+    }
+
+    /**
+     * Update schedule status tracking
+     */
+    private updateScheduleStatus(
+        scheduleId: string,
+        workflowName: string,
+        isManaged: boolean,
+        isActive: boolean,
+        error?: string,
+    ): void {
+        const existing = this.managedSchedules.get(scheduleId);
+        const now = new Date();
+
+        this.managedSchedules.set(scheduleId, {
+            scheduleId,
+            workflowName,
+            isManaged,
+            isActive,
+            lastError: error,
+            createdAt: existing?.createdAt || now,
+            lastUpdatedAt: now,
+        });
+    }
+
+    /**
+     * Log setup results with summary
+     */
+    private logSetupResults(
+        results: PromiseSettledResult<void>[],
+        scheduledWorkflows: ScheduledMethodInfo[],
+    ): void {
+        const successful = results.filter((r) => r.status === 'fulfilled').length;
+        const failed = results.filter((r) => r.status === 'rejected').length;
+
+        this.logger.log(
+            `Schedule setup completed: ${successful} successful, ${failed} failed out of ${scheduledWorkflows.length} total`,
+        );
+
+        if (failed > 0) {
+            this.logger.warn(
+                `${failed} schedules failed to setup. Use retryFailedSetups() to retry.`,
+            );
+        }
+    }
+
+    /**
      * Ensure a schedule is managed by this service
      */
     private ensureScheduleManaged(scheduleId: string): void {
         if (!this.isScheduleManaged(scheduleId)) {
-            throw new Error(`Schedule ${scheduleId} is not managed by this service`);
+            throw new Error(`Schedule '${scheduleId}' is not managed by this service`);
         }
     }
 

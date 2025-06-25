@@ -1,25 +1,22 @@
 import { Injectable, Logger } from '@nestjs/common';
-import {
-    TEMPORAL_ACTIVITY,
-    TEMPORAL_ACTIVITY_METHOD,
-    TEMPORAL_ACTIVITY_METHOD_NAME,
-    TEMPORAL_ACTIVITY_METHOD_OPTIONS,
-    LOG_CATEGORIES,
-} from '../constants';
-import { ActivityMethodHandler } from '../interfaces';
-import { ActivityMetadata, ActivityMethodMetadata } from 'src/interfaces';
+import { TEMPORAL_ACTIVITY, TEMPORAL_ACTIVITY_METHOD } from 'src/constants';
+import { ActivityMetadata, ActivityMethodMetadata, ActivityMethodHandler } from 'src/interfaces';
 
 /**
- * Enhanced service for accessing Temporal-related metadata
+ * Streamlined Temporal Metadata Accessor
  * Provides efficient discovery and extraction of metadata from decorated classes and methods
  */
 @Injectable()
 export class TemporalMetadataAccessor {
-    private readonly logger = new Logger(LOG_CATEGORIES.ACTIVITY);
+    private readonly logger = new Logger(TemporalMetadataAccessor.name);
 
-    // Cache for metadata to avoid repeated reflection calls
+    // Efficient caching to avoid repeated reflection calls
     private readonly activityClassCache = new WeakMap<any, ActivityMetadata | null>();
     private readonly activityMethodCache = new WeakMap<any, Map<string, ActivityMethodMetadata>>();
+
+    // ==========================================
+    // Activity Class Methods
+    // ==========================================
 
     /**
      * Check if target class is marked as a Temporal Activity
@@ -59,6 +56,10 @@ export class TemporalMetadataAccessor {
         return metadata;
     }
 
+    // ==========================================
+    // Activity Method Methods
+    // ==========================================
+
     /**
      * Check if target method is marked as a Temporal Activity Method
      */
@@ -78,7 +79,8 @@ export class TemporalMetadataAccessor {
             return null;
         }
 
-        return Reflect.getMetadata(TEMPORAL_ACTIVITY_METHOD_NAME, target) || null;
+        const metadata = Reflect.getMetadata(TEMPORAL_ACTIVITY_METHOD, target);
+        return metadata?.name || null;
     }
 
     /**
@@ -89,11 +91,16 @@ export class TemporalMetadataAccessor {
             return null;
         }
 
-        return Reflect.getMetadata(TEMPORAL_ACTIVITY_METHOD_OPTIONS, target) || null;
+        const metadata = Reflect.getMetadata(TEMPORAL_ACTIVITY_METHOD, target);
+        return metadata || null;
     }
 
+    // ==========================================
+    // Activity Extraction Methods
+    // ==========================================
+
     /**
-     * Extract all activity methods from a class instance with enhanced caching
+     * Extract all activity methods from a class instance
      * Returns map of activity name to bound method handler
      */
     extractActivityMethods(instance: any): Map<string, ActivityMethodHandler> {
@@ -188,6 +195,51 @@ export class TemporalMetadataAccessor {
         return methodNames;
     }
 
+    // ==========================================
+    // Utility Methods
+    // ==========================================
+
+    /**
+     * Get comprehensive activity information for a class
+     */
+    getActivityInfo(target: any): {
+        isActivity: boolean;
+        activityOptions: ActivityMetadata | null;
+        methodNames: string[];
+        methodCount: number;
+    } {
+        return {
+            isActivity: this.isActivity(target),
+            activityOptions: this.getActivityOptions(target),
+            methodNames: this.getActivityMethodNames(target),
+            methodCount: this.getActivityMethodNames(target).length,
+        };
+    }
+
+    /**
+     * Validate that an activity class has at least one activity method
+     */
+    validateActivityClass(target: any): {
+        isValid: boolean;
+        issues: string[];
+    } {
+        const issues: string[] = [];
+
+        if (!this.isActivity(target)) {
+            issues.push('Class is not marked with @Activity decorator');
+        }
+
+        const methodNames = this.getActivityMethodNames(target);
+        if (methodNames.length === 0) {
+            issues.push('Activity class has no methods marked with @ActivityMethod');
+        }
+
+        return {
+            isValid: issues.length === 0,
+            issues,
+        };
+    }
+
     /**
      * Clear metadata caches (useful for testing or hot reloading)
      */
@@ -198,17 +250,17 @@ export class TemporalMetadataAccessor {
     }
 
     /**
-     * Get statistics about cached metadata
+     * Get cache statistics (limited due to WeakMap nature)
      */
     getCacheStats(): {
-        activityClassesCached: number;
-        activityMethodsCached: number;
+        message: string;
+        note: string;
     } {
         // WeakMaps don't expose size, so we can't provide exact counts
-        // This is a limitation but protects against memory leaks
+        // This protects against memory leaks but limits introspection
         return {
-            activityClassesCached: -1, // Unknown due to WeakMap
-            activityMethodsCached: -1, // Unknown due to WeakMap
+            message: 'Cache statistics not available',
+            note: 'WeakMap-based caching prevents memory leaks but limits size reporting',
         };
     }
 
@@ -250,13 +302,13 @@ export class TemporalMetadataAccessor {
                 if (typeof method !== 'function') continue;
 
                 if (this.isActivityMethod(method)) {
-                    const activityName = this.getActivityMethodName(method) || propertyName;
-                    const options = this.getActivityMethodOptions(method);
+                    const metadata = this.getActivityMethodOptions(method);
+                    const activityName = metadata?.name || propertyName;
 
                     methods.set(activityName, {
                         name: activityName,
                         originalName: propertyName,
-                        options: options || undefined,
+                        options: metadata || undefined,
                         handler: method, // Not bound yet
                     });
 
@@ -272,28 +324,5 @@ export class TemporalMetadataAccessor {
         }
 
         return methods;
-    }
-
-    /**
-     * Validate that a method signature is compatible with activity requirements
-     */
-    private validateMethodSignature(method: any, methodName: string): boolean {
-        try {
-            // Check if method is callable
-            if (typeof method !== 'function') {
-                this.logger.warn(`Method ${methodName} is not a function`);
-                return false;
-            }
-
-            // Additional validation could be added here
-            // For example, checking parameter types, return types, etc.
-
-            return true;
-        } catch (error) {
-            this.logger.warn(
-                `Error validating method signature for ${methodName}: ${error.message}`,
-            );
-            return false;
-        }
     }
 }

@@ -1,15 +1,14 @@
 import { DynamicModule, Module } from '@nestjs/common';
 import { DiscoveryService, MetadataScanner } from '@nestjs/core';
-import { TemporalClientModule } from './client/temporal-client.module';
-import { TemporalWorkerModule } from './worker/temporal-worker.module';
-import { TemporalOptions, TemporalAsyncOptions, TemporalOptionsFactory } from './interfaces';
 import { TemporalService } from './temporal.service';
-import { WorkflowDiscoveryService } from './discovery/workflow-discovery.service';
-import { ScheduleManagerService } from './discovery/schedule-manager.service';
+import { TemporalOptions, TemporalAsyncOptions, TemporalOptionsFactory } from './interfaces';
 import { DEFAULT_TASK_QUEUE, ERRORS } from './constants';
+import { TemporalClientModule } from './client';
+import { TemporalWorkerModule } from './worker';
+import { TemporalDiscoveryService, TemporalScheduleManagerService } from './discovery';
 
 /**
- * Enhanced unified module for Temporal integration with NestJS
+ * Streamlined unified module for Temporal integration with NestJS
  *
  * Provides comprehensive Temporal functionality including:
  * - Client operations (workflows, signals, queries)
@@ -49,24 +48,29 @@ export class TemporalModule {
      */
     static register(options: TemporalOptions): DynamicModule {
         const { clientOptions, workerOptions } = this.processOptions(options);
-        const imports = [TemporalClientModule.register(clientOptions)];
+        const imports: any[] = [TemporalClientModule.register(clientOptions)];
 
         // Add worker module if worker configuration is provided
         if (workerOptions) {
-            imports.push(TemporalWorkerModule.register(workerOptions));
+            imports.push(TemporalWorkerModule.register(options));
         }
 
         return {
             module: TemporalModule,
             imports,
             providers: [
-                TemporalService,
+                // Core NestJS discovery services
                 DiscoveryService,
                 MetadataScanner,
-                WorkflowDiscoveryService,
-                ScheduleManagerService,
+
+                // Our discovery and management services
+                TemporalDiscoveryService,
+                TemporalScheduleManagerService,
+
+                // Unified service
+                TemporalService,
             ],
-            exports: [TemporalService, WorkflowDiscoveryService, ScheduleManagerService],
+            exports: [TemporalService],
             global: options.isGlobal,
         };
     }
@@ -107,48 +111,60 @@ export class TemporalModule {
     static registerAsync(options: TemporalAsyncOptions): DynamicModule {
         this.validateAsyncOptions(options);
 
+        const imports: any[] = [
+            ...(options.imports || []),
+
+            // Client module (always required)
+            TemporalClientModule.registerAsync({
+                imports: options.imports,
+                useFactory: async (...args: any[]) => {
+                    const temporalOptions = await this.createOptionsFromFactory(options, args);
+                    const { clientOptions } = this.processOptions(temporalOptions);
+                    return clientOptions;
+                },
+                inject: options.inject,
+            }),
+        ];
+
+        // Worker module (conditional - only if worker configuration is provided)
+        imports.push(
+            TemporalWorkerModule.registerAsync({
+                imports: options.imports,
+                useFactory: async (...args: any[]) => {
+                    const temporalOptions = await this.createOptionsFromFactory(options, args);
+                    const { workerOptions } = this.processOptions(temporalOptions);
+
+                    // If no worker configuration, return minimal config to satisfy the module
+                    if (!workerOptions) {
+                        return {
+                            connection: temporalOptions.connection,
+                            taskQueue: temporalOptions.taskQueue || DEFAULT_TASK_QUEUE,
+                            worker: { activityClasses: [] },
+                        };
+                    }
+
+                    return temporalOptions;
+                },
+                inject: options.inject,
+            }),
+        );
+
         return {
             module: TemporalModule,
-            imports: [
-                ...(options.imports || []),
-
-                // Client module (always required)
-                TemporalClientModule.registerAsync({
-                    imports: options.imports,
-                    useFactory: async (...args: any[]) => {
-                        const temporalOptions = await this.createOptionsFromFactory(options, args);
-                        const { clientOptions } = this.processOptions(temporalOptions);
-                        return clientOptions;
-                    },
-                    inject: options.inject,
-                }),
-
-                // Worker module (conditional)
-                TemporalWorkerModule.registerAsync({
-                    imports: options.imports,
-                    useFactory: async (...args: any[]) => {
-                        const temporalOptions = await this.createOptionsFromFactory(options, args);
-                        const { workerOptions } = this.processOptions(temporalOptions);
-
-                        if (!workerOptions) {
-                            throw new Error(
-                                'Worker configuration is required for async registration with worker',
-                            );
-                        }
-
-                        return workerOptions;
-                    },
-                    inject: options.inject,
-                }),
-            ],
+            imports,
             providers: [
-                TemporalService,
+                // Core NestJS discovery services
                 DiscoveryService,
                 MetadataScanner,
-                WorkflowDiscoveryService,
-                ScheduleManagerService,
+
+                // Our discovery and management services
+                TemporalDiscoveryService,
+                TemporalScheduleManagerService,
+
+                // Unified service
+                TemporalService,
             ],
-            exports: [TemporalService, WorkflowDiscoveryService, ScheduleManagerService],
+            exports: [TemporalService],
             global: options.isGlobal,
         };
     }
@@ -180,11 +196,29 @@ export class TemporalModule {
         connection: TemporalOptions['connection'];
         isGlobal?: boolean;
     }): DynamicModule {
-        return this.register({
-            connection: options.connection,
-            isGlobal: options.isGlobal,
-            // No worker configuration
-        });
+        return {
+            module: TemporalModule,
+            imports: [
+                TemporalClientModule.register({
+                    connection: options.connection,
+                    isGlobal: options.isGlobal,
+                }),
+            ],
+            providers: [
+                // Core NestJS discovery services
+                DiscoveryService,
+                MetadataScanner,
+
+                // Our discovery and management services
+                TemporalDiscoveryService,
+                TemporalScheduleManagerService,
+
+                // Unified service
+                TemporalService,
+            ],
+            exports: [TemporalService],
+            global: options.isGlobal,
+        };
     }
 
     /**
@@ -220,7 +254,7 @@ export class TemporalModule {
         activityClasses?: any[];
         isGlobal?: boolean;
     }): DynamicModule {
-        return this.register({
+        const temporalOptions: TemporalOptions = {
             connection: options.connection,
             taskQueue: options.taskQueue,
             worker: {
@@ -229,7 +263,39 @@ export class TemporalModule {
                 activityClasses: options.activityClasses,
             },
             isGlobal: options.isGlobal,
-        });
+        };
+
+        return {
+            module: TemporalModule,
+            imports: [
+                TemporalClientModule.register(temporalOptions),
+                TemporalWorkerModule.register(temporalOptions),
+            ],
+            providers: [
+                // Core NestJS discovery services
+                DiscoveryService,
+                MetadataScanner,
+
+                // Our discovery and management services
+                TemporalDiscoveryService,
+                TemporalScheduleManagerService,
+
+                // Unified service
+                TemporalService,
+            ],
+            exports: [TemporalService],
+            global: options.isGlobal,
+        };
+    }
+
+    /**
+     * Register with full functionality (shorthand for register)
+     *
+     * @param options Full configuration options
+     * @returns Configured dynamic module
+     */
+    static withFullFeatures(options: TemporalOptions): DynamicModule {
+        return this.register(options);
     }
 
     // ==========================================
@@ -245,8 +311,7 @@ export class TemporalModule {
         // Build client options (always required)
         const clientOptions = {
             connection: options.connection,
-            namespace: options.connection.namespace,
-            allowConnectionFailure: true,
+            allowConnectionFailure: options.allowConnectionFailure !== false,
         };
 
         // Build worker options (optional)
@@ -254,13 +319,12 @@ export class TemporalModule {
         if (options.worker) {
             workerOptions = {
                 connection: options.connection,
-                namespace: options.connection.namespace,
                 taskQueue: options.taskQueue || DEFAULT_TASK_QUEUE,
                 workflowsPath: options.worker.workflowsPath,
                 workflowBundle: options.worker.workflowBundle,
                 activityClasses: options.worker.activityClasses,
                 autoStart: options.worker.autoStart !== false,
-                allowWorkerFailure: true,
+                allowWorkerFailure: options.allowConnectionFailure !== false,
                 workerOptions: options.worker.workerOptions,
             };
         }

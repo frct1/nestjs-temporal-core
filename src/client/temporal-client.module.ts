@@ -7,52 +7,53 @@ import {
     Logger,
 } from '@nestjs/common';
 import { Client, Connection } from '@temporalio/client';
-import {
-    TemporalClientOptions,
-    TemporalClientAsyncOptions,
-    TemporalClientOptionsFactory,
-} from '../interfaces';
-import {
-    TEMPORAL_CLIENT,
-    TEMPORAL_CLIENT_MODULE_OPTIONS,
-    DEFAULT_NAMESPACE,
-    ERRORS,
-} from '../constants';
+import { TemporalOptions, TemporalAsyncOptions, TemporalOptionsFactory } from 'src/interfaces';
+import { TEMPORAL_CLIENT, TEMPORAL_MODULE_OPTIONS, DEFAULT_NAMESPACE, ERRORS } from 'src/constants';
 import { TemporalClientService } from './temporal-client.service';
 import { TemporalScheduleService } from './temporal-schedule.service';
 
 /**
- * Global module for Temporal client configuration
- * Provides a configured Temporal client throughout the application
+ * Streamlined Temporal Client Module
+ * Provides configured Temporal client and services throughout the application
  */
 @Global()
 @Module({})
 export class TemporalClientModule {
     private static readonly logger = new Logger(TemporalClientModule.name);
 
+    // ==========================================
+    // Synchronous Registration
+    // ==========================================
+
     /**
      * Register module with synchronous options
      */
-    static register(options: TemporalClientOptions): DynamicModule {
+    static register(options: TemporalOptions): DynamicModule {
+        const clientOptions = this.extractClientOptions(options);
+
         return {
             module: TemporalClientModule,
             providers: [
                 {
-                    provide: TEMPORAL_CLIENT_MODULE_OPTIONS,
-                    useValue: options,
+                    provide: TEMPORAL_MODULE_OPTIONS,
+                    useValue: clientOptions,
                 },
-                this.createClientProvider(options),
+                this.createClientProvider(clientOptions),
                 TemporalClientService,
                 TemporalScheduleService,
             ],
-            exports: [TemporalClientService, TemporalScheduleService],
+            exports: [TemporalClientService, TemporalScheduleService, TEMPORAL_CLIENT],
         };
     }
+
+    // ==========================================
+    // Asynchronous Registration
+    // ==========================================
 
     /**
      * Register module with asynchronous options
      */
-    static registerAsync(options: TemporalClientAsyncOptions): DynamicModule {
+    static registerAsync(options: TemporalAsyncOptions): DynamicModule {
         return {
             module: TemporalClientModule,
             imports: options.imports || [],
@@ -62,14 +63,35 @@ export class TemporalClientModule {
                 TemporalClientService,
                 TemporalScheduleService,
             ],
-            exports: [TemporalClientService, TemporalScheduleService],
+            exports: [TemporalClientService, TemporalScheduleService, TEMPORAL_CLIENT],
         };
     }
+
+    // ==========================================
+    // Simplified Registration Methods
+    // ==========================================
+
+    /**
+     * Register for client-only usage (no worker)
+     */
+    static forClient(options: {
+        connection: TemporalOptions['connection'];
+        isGlobal?: boolean;
+    }): DynamicModule {
+        return this.register({
+            connection: options.connection,
+            isGlobal: options.isGlobal,
+        });
+    }
+
+    // ==========================================
+    // Provider Creation Methods
+    // ==========================================
 
     /**
      * Create client provider for sync registration
      */
-    private static createClientProvider(options: TemporalClientOptions): Provider {
+    private static createClientProvider(options: any): Provider {
         return {
             provide: TEMPORAL_CLIENT,
             useFactory: async () => this.createClientInstance(options),
@@ -82,20 +104,22 @@ export class TemporalClientModule {
     private static createAsyncClientProvider(): Provider {
         return {
             provide: TEMPORAL_CLIENT,
-            useFactory: async (clientOptions: TemporalClientOptions) =>
-                this.createClientInstance(clientOptions),
-            inject: [TEMPORAL_CLIENT_MODULE_OPTIONS],
+            useFactory: async (temporalOptions: TemporalOptions) => {
+                const clientOptions = this.extractClientOptions(temporalOptions);
+                return this.createClientInstance(clientOptions);
+            },
+            inject: [TEMPORAL_MODULE_OPTIONS],
         };
     }
 
     /**
      * Create async providers based on configuration type
      */
-    private static createAsyncProviders(options: TemporalClientAsyncOptions): Provider[] {
+    private static createAsyncProviders(options: TemporalAsyncOptions): Provider[] {
         if (options.useFactory) {
             return [
                 {
-                    provide: TEMPORAL_CLIENT_MODULE_OPTIONS,
+                    provide: TEMPORAL_MODULE_OPTIONS,
                     useFactory: options.useFactory,
                     inject: options.inject || [],
                 },
@@ -105,9 +129,9 @@ export class TemporalClientModule {
         if (options.useClass) {
             return [
                 {
-                    provide: TEMPORAL_CLIENT_MODULE_OPTIONS,
-                    useFactory: async (optionsFactory: TemporalClientOptionsFactory) =>
-                        optionsFactory.createClientOptions(),
+                    provide: TEMPORAL_MODULE_OPTIONS,
+                    useFactory: async (optionsFactory: TemporalOptionsFactory) =>
+                        optionsFactory.createTemporalOptions(),
                     inject: [options.useClass],
                 },
                 {
@@ -120,9 +144,9 @@ export class TemporalClientModule {
         if (options.useExisting) {
             return [
                 {
-                    provide: TEMPORAL_CLIENT_MODULE_OPTIONS,
-                    useFactory: async (optionsFactory: TemporalClientOptionsFactory) =>
-                        optionsFactory.createClientOptions(),
+                    provide: TEMPORAL_MODULE_OPTIONS,
+                    useFactory: async (optionsFactory: TemporalOptionsFactory) =>
+                        optionsFactory.createTemporalOptions(),
                     inject: [options.useExisting],
                 },
             ];
@@ -131,12 +155,14 @@ export class TemporalClientModule {
         throw new Error(ERRORS.INVALID_OPTIONS);
     }
 
+    // ==========================================
+    // Client Instance Creation
+    // ==========================================
+
     /**
      * Create and configure Temporal client instance
      */
-    private static async createClientInstance(
-        options: TemporalClientOptions,
-    ): Promise<Client | null> {
+    private static async createClientInstance(options: any): Promise<Client | null> {
         let connection: Connection | null = null;
 
         try {
@@ -159,7 +185,7 @@ export class TemporalClientModule {
 
             connection = await Connection.connect(connectionConfig);
 
-            const namespace = options.namespace || DEFAULT_NAMESPACE;
+            const namespace = options.connection.namespace || DEFAULT_NAMESPACE;
             this.logger.log(`Connected to Temporal server, using namespace "${namespace}"`);
 
             // Create client with shutdown capabilities
@@ -209,5 +235,38 @@ export class TemporalClientModule {
         };
 
         return enhancedClient;
+    }
+
+    // ==========================================
+    // Helper Methods
+    // ==========================================
+
+    /**
+     * Extract client-specific options from full Temporal options
+     */
+    private static extractClientOptions(options: TemporalOptions): any {
+        return {
+            connection: {
+                address: options.connection.address,
+                namespace: options.connection.namespace,
+                tls: options.connection.tls,
+                apiKey: options.connection.apiKey,
+                metadata: options.connection.metadata,
+            },
+            allowConnectionFailure: true, // Default to graceful failure
+        };
+    }
+
+    /**
+     * Validate client options
+     */
+    private static validateOptions(options: any): void {
+        if (!options.connection) {
+            throw new Error('Connection configuration is required');
+        }
+
+        if (!options.connection.address) {
+            throw new Error('Connection address is required');
+        }
     }
 }

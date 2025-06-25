@@ -1,6 +1,6 @@
 import { SetMetadata } from '@nestjs/common';
-import { TEMPORAL_SCHEDULED_WORKFLOW } from '../constants';
-import { ScheduledOptions, CronOptions, IntervalOptions } from '../interfaces';
+import { TEMPORAL_SCHEDULED_WORKFLOW } from 'src/constants';
+import { ScheduledOptions, CronOptions, IntervalOptions } from 'src/interfaces';
 
 /**
  * Marks a workflow method as scheduled
@@ -46,6 +46,16 @@ export const Scheduled = (options: ScheduledOptions): MethodDecorator => {
 
         if (options.cron && options.interval) {
             throw new Error('@Scheduled cannot have both cron and interval');
+        }
+
+        // Validate cron expression basic format
+        if (options.cron && !isValidCronExpression(options.cron)) {
+            throw new Error(`Invalid cron expression: ${options.cron}`);
+        }
+
+        // Validate interval expression basic format
+        if (options.interval && !isValidIntervalExpression(options.interval)) {
+            throw new Error(`Invalid interval expression: ${options.interval}`);
         }
 
         Reflect.defineMetadata(TEMPORAL_SCHEDULED_WORKFLOW, options, descriptor.value);
@@ -127,3 +137,41 @@ export const Interval = (interval: string, options: IntervalOptions): MethodDeco
         interval,
     });
 };
+
+// ==========================================
+// Helper Functions
+// ==========================================
+
+/**
+ * Basic cron expression validation
+ * Checks for proper format: 5 or 6 fields separated by spaces
+ */
+function isValidCronExpression(cron: string): boolean {
+    if (!cron || typeof cron !== 'string') {
+        return false;
+    }
+
+    const parts = cron.trim().split(/\s+/);
+
+    // Support both 5-field (minute hour day month weekday) and 6-field (second minute hour day month weekday) format
+    if (parts.length !== 5 && parts.length !== 6) {
+        return false;
+    }
+
+    // Basic validation - each part should not be empty
+    return parts.every((part) => part.length > 0 && part !== '');
+}
+
+/**
+ * Basic interval expression validation
+ * Checks for format like: 1s, 5m, 2h, 1d
+ */
+function isValidIntervalExpression(interval: string): boolean {
+    if (!interval || typeof interval !== 'string') {
+        return false;
+    }
+
+    // Match patterns like: 1s, 5m, 2h, 1d, 30s, etc.
+    const intervalPattern = /^\d+[smhd]$/;
+    return intervalPattern.test(interval.trim());
+}

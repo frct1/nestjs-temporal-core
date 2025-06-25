@@ -1,8 +1,12 @@
 import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Client, ScheduleClient, ScheduleHandle, ScheduleOverlapPolicy } from '@temporalio/client';
-import { TEMPORAL_CLIENT, ERRORS } from '../constants';
-import { StringValue } from 'ms';
+import { StringValue } from '@temporalio/common';
+import { TEMPORAL_CLIENT, ERRORS } from 'src/constants';
 
+/**
+ * Streamlined Temporal Schedule Service
+ * Handles all schedule operations: create, pause, resume, delete, trigger
+ */
 @Injectable()
 export class TemporalScheduleService implements OnModuleInit {
     private readonly logger = new Logger(TemporalScheduleService.name);
@@ -34,24 +38,32 @@ export class TemporalScheduleService implements OnModuleInit {
         }
     }
 
+    // ==========================================
+    // Schedule Creation
+    // ==========================================
+
     /**
      * Create a cron-based scheduled workflow
      */
-    async createCronWorkflow(
+    async createCronSchedule(
         scheduleId: string,
         workflowType: string,
         cronExpression: string,
         taskQueue: string,
         args: any[] = [],
-        description?: string,
-        timezone?: string,
+        options?: {
+            description?: string;
+            timezone?: string;
+            overlapPolicy?: ScheduleOverlapPolicy;
+            startPaused?: boolean;
+        },
     ): Promise<ScheduleHandle> {
         this.ensureClientInitialized();
 
         try {
             const scheduleSpec: any = {
                 cronExpressions: [cronExpression],
-                ...(timezone && { timeZone: timezone }),
+                ...(options?.timezone && { timeZone: options.timezone }),
             };
 
             const handle = await this.scheduleClient!.create({
@@ -64,12 +76,18 @@ export class TemporalScheduleService implements OnModuleInit {
                     args,
                     workflowId: this.generateScheduledWorkflowId(scheduleId),
                 },
-                ...(description && { memo: { description } }),
+                ...(options?.description && { memo: { description: options.description } }),
+                policies: {
+                    ...(options?.overlapPolicy && { overlap: options.overlapPolicy }),
+                },
+                state: {
+                    paused: options?.startPaused || false,
+                },
             });
 
             this.logger.log(
                 `Created cron schedule: ${scheduleId} -> ${workflowType} (${cronExpression})${
-                    timezone ? ` in ${timezone}` : ''
+                    options?.timezone ? ` in ${options.timezone}` : ''
                 }`,
             );
 
@@ -84,13 +102,17 @@ export class TemporalScheduleService implements OnModuleInit {
     /**
      * Create an interval-based scheduled workflow
      */
-    async createIntervalWorkflow(
+    async createIntervalSchedule(
         scheduleId: string,
         workflowType: string,
         interval: StringValue | number,
         taskQueue: string,
         args: any[] = [],
-        description?: string,
+        options?: {
+            description?: string;
+            overlapPolicy?: ScheduleOverlapPolicy;
+            startPaused?: boolean;
+        },
     ): Promise<ScheduleHandle> {
         this.ensureClientInitialized();
 
@@ -107,7 +129,13 @@ export class TemporalScheduleService implements OnModuleInit {
                     args,
                     workflowId: this.generateScheduledWorkflowId(scheduleId),
                 },
-                ...(description && { memo: { description } }),
+                ...(options?.description && { memo: { description: options.description } }),
+                policies: {
+                    ...(options?.overlapPolicy && { overlap: options.overlapPolicy }),
+                },
+                state: {
+                    paused: options?.startPaused || false,
+                },
             });
 
             this.logger.log(
@@ -120,6 +148,10 @@ export class TemporalScheduleService implements OnModuleInit {
             throw new Error(errorMsg);
         }
     }
+
+    // ==========================================
+    // Schedule Management
+    // ==========================================
 
     /**
      * Pause a running schedule
@@ -149,14 +181,27 @@ export class TemporalScheduleService implements OnModuleInit {
     /**
      * Trigger an immediate run of a scheduled workflow
      */
-    async triggerNow(
+    async triggerSchedule(
         scheduleId: string,
-        overlap: ScheduleOverlapPolicy = 'ALLOW_ALL',
+        overlapPolicy: ScheduleOverlapPolicy = 'ALLOW_ALL',
     ): Promise<void> {
         await this.executeScheduleOperation(scheduleId, 'trigger', (handle) =>
-            handle.trigger(overlap),
+            handle.trigger(overlapPolicy),
         );
     }
+
+    /**
+     * Update a schedule's configuration
+     */
+    async updateSchedule(scheduleId: string, updateFn: (schedule: any) => any): Promise<void> {
+        await this.executeScheduleOperation(scheduleId, 'update', (handle) =>
+            handle.update(updateFn),
+        );
+    }
+
+    // ==========================================
+    // Schedule Information
+    // ==========================================
 
     /**
      * List all schedules with pagination
@@ -194,13 +239,21 @@ export class TemporalScheduleService implements OnModuleInit {
     }
 
     /**
-     * Update a schedule's configuration
+     * Check if a schedule exists
      */
-    async updateSchedule(scheduleId: string, updateFn: (schedule: any) => any): Promise<void> {
-        await this.executeScheduleOperation(scheduleId, 'update', (handle) =>
-            handle.update(updateFn),
-        );
+    async scheduleExists(scheduleId: string): Promise<boolean> {
+        try {
+            const schedules = await this.listSchedules();
+            return schedules.some((s) => s.scheduleId === scheduleId);
+        } catch (error) {
+            this.logger.warn(`Failed to check if schedule exists: ${error.message}`);
+            return false;
+        }
     }
+
+    // ==========================================
+    // Client Access & Health
+    // ==========================================
 
     /**
      * Get the Temporal Schedule client
@@ -208,6 +261,32 @@ export class TemporalScheduleService implements OnModuleInit {
     getScheduleClient(): ScheduleClient | null {
         return this.scheduleClient;
     }
+
+    /**
+     * Check if schedule client is available and healthy
+     */
+    isHealthy(): boolean {
+        return Boolean(this.scheduleClient);
+    }
+
+    /**
+     * Get schedule service status for monitoring
+     */
+    getStatus(): {
+        available: boolean;
+        healthy: boolean;
+        schedulesSupported: boolean;
+    } {
+        return {
+            available: Boolean(this.client),
+            healthy: this.isHealthy(),
+            schedulesSupported: Boolean(this.scheduleClient),
+        };
+    }
+
+    // ==========================================
+    // Private Helper Methods
+    // ==========================================
 
     /**
      * Execute a schedule operation with consistent error handling

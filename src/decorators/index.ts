@@ -1,18 +1,35 @@
 /**
- * Re-export all decorators for easier imports
+ * NestJS Temporal Core - All Decorators
+ *
+ * Consolidated export of all Temporal decorators organized by domain:
+ * - Activity decorators: @Activity, @ActivityMethod
+ * - Workflow decorators: @WorkflowController, @WorkflowMethod, @Signal, @Query
+ * - Scheduling decorators: @Scheduled, @Cron, @Interval
+ * - Parameter decorators: @WorkflowParam, @WorkflowContext, @WorkflowId, @RunId, @TaskQueue
  */
 
-// Core decorators (Activity, Workflow, WorkflowController)
-export * from './core.decorators';
+// ==========================================
+// Activity Decorators
+// ==========================================
+export { Activity, ActivityMethod } from './activity.decorator';
 
-// Communication decorators (Signal, Query)
-export * from './communication.decorators';
+// ==========================================
+// Workflow Decorators
+// ==========================================
+export { WorkflowController, WorkflowMethod, Signal, Query } from './workflow.decorator';
 
-// Scheduling decorators (Scheduled, Cron, Interval)
-export * from './scheduling.decorators';
+// ==========================================
+// Scheduling Decorators
+// ==========================================
+export { Scheduled, Cron, Interval } from './scheduling.decorator';
 
-// Parameter decorators (WorkflowParam, WorkflowContext)
-export * from './parameter.decorators';
-
-// Workflow starter decorator
-export * from './workflow-starter.decorator';
+// ==========================================
+// Parameter Decorators
+// ==========================================
+export {
+    WorkflowParam,
+    WorkflowContext,
+    WorkflowId,
+    RunId,
+    TaskQueue,
+} from './parameter.decorator';

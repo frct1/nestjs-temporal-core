@@ -8,23 +8,21 @@ import {
 } from '@nestjs/common';
 import { DiscoveryService } from '@nestjs/core';
 import { NativeConnection, Worker } from '@temporalio/worker';
-import {
-    TEMPORAL_WORKER_MODULE_OPTIONS,
-    ERRORS,
-    DEFAULT_NAMESPACE,
-    LOG_CATEGORIES,
-    WORKER_PRESETS,
-} from '../constants';
 import { TemporalMetadataAccessor } from './temporal-metadata.accessor';
-import { ActivityMethodHandler, TemporalWorkerOptions, WorkerStatus } from 'src/interfaces';
+import { TEMPORAL_MODULE_OPTIONS, ERRORS, DEFAULT_NAMESPACE, WORKER_PRESETS } from 'src/constants';
+import { ActivityMethodHandler, WorkerStatus, WorkerCreateOptions } from 'src/interfaces';
 
 /**
- * Enhanced service responsible for creating and managing Temporal workers
- * Provides comprehensive worker lifecycle management with monitoring and health checks
+ * Streamlined Temporal Worker Manager Service
+ * Creates and manages Temporal workers with comprehensive lifecycle management
  */
 @Injectable()
-export class WorkerManager implements OnModuleInit, OnModuleDestroy, OnApplicationBootstrap {
-    private readonly logger = new Logger(LOG_CATEGORIES.WORKER);
+export class TemporalWorkerManagerService
+    implements OnModuleInit, OnModuleDestroy, OnApplicationBootstrap
+{
+    private readonly logger = new Logger(TemporalWorkerManagerService.name);
+
+    // Worker state
     private worker: Worker | null = null;
     private connection: NativeConnection | null = null;
     private isInitialized = false;
@@ -34,11 +32,15 @@ export class WorkerManager implements OnModuleInit, OnModuleDestroy, OnApplicati
     private activities: Record<string, ActivityMethodHandler> = {};
 
     constructor(
-        @Inject(TEMPORAL_WORKER_MODULE_OPTIONS)
-        private readonly options: TemporalWorkerOptions,
+        @Inject(TEMPORAL_MODULE_OPTIONS)
+        private readonly options: any,
         private readonly discoveryService: DiscoveryService,
         private readonly metadataAccessor: TemporalMetadataAccessor,
     ) {}
+
+    // ==========================================
+    // Lifecycle Methods
+    // ==========================================
 
     async onModuleInit() {
         try {
@@ -70,6 +72,10 @@ export class WorkerManager implements OnModuleInit, OnModuleDestroy, OnApplicati
     async onModuleDestroy() {
         await this.shutdown();
     }
+
+    // ==========================================
+    // Worker Initialization
+    // ==========================================
 
     /**
      * Initialize the worker with comprehensive setup
@@ -141,13 +147,13 @@ export class WorkerManager implements OnModuleInit, OnModuleDestroy, OnApplicati
 
         this.worker = await Worker.create({
             connection: this.connection,
-            namespace: this.options.namespace || DEFAULT_NAMESPACE,
+            namespace: this.options.connection?.namespace || DEFAULT_NAMESPACE,
             ...workerOptions,
         });
 
         this.logger.log(
             `Worker created for queue: ${this.options.taskQueue} in namespace: ${
-                this.options.namespace || DEFAULT_NAMESPACE
+                this.options.connection?.namespace || DEFAULT_NAMESPACE
             }`,
         );
     }
@@ -184,7 +190,7 @@ export class WorkerManager implements OnModuleInit, OnModuleDestroy, OnApplicati
     /**
      * Get environment-specific default worker options
      */
-    private getEnvironmentDefaults(): any {
+    private getEnvironmentDefaults(): WorkerCreateOptions {
         const env = process.env.NODE_ENV || 'development';
 
         switch (env) {
@@ -193,12 +199,21 @@ export class WorkerManager implements OnModuleInit, OnModuleDestroy, OnApplicati
             case 'development':
                 return WORKER_PRESETS.DEVELOPMENT;
             default:
-                return WORKER_PRESETS.PRODUCTION_MINIMAL;
+                return {
+                    maxConcurrentActivityTaskExecutions: 20,
+                    maxConcurrentWorkflowTaskExecutions: 10,
+                    maxConcurrentLocalActivityExecutions: 20,
+                    reuseV8Context: true,
+                };
         }
     }
 
+    // ==========================================
+    // Activity Discovery
+    // ==========================================
+
     /**
-     * Discover and register activity implementations with enhanced error handling
+     * Discover and register activity implementations
      */
     private async discoverActivities(): Promise<Record<string, ActivityMethodHandler>> {
         const activities: Record<string, ActivityMethodHandler> = {};
@@ -232,6 +247,17 @@ export class WorkerManager implements OnModuleInit, OnModuleDestroy, OnApplicati
                 const className = instance.constructor.name;
                 this.logger.debug(`Processing activity class: ${className}`);
 
+                // Validate the activity class
+                const validation = this.metadataAccessor.validateActivityClass(
+                    instance.constructor,
+                );
+                if (!validation.isValid) {
+                    this.logger.warn(
+                        `Activity class ${className} has issues: ${validation.issues.join(', ')}`,
+                    );
+                    continue;
+                }
+
                 const activityMethods = this.metadataAccessor.extractActivityMethods(instance);
 
                 for (const [activityName, method] of activityMethods.entries()) {
@@ -258,7 +284,7 @@ export class WorkerManager implements OnModuleInit, OnModuleDestroy, OnApplicati
     private logWorkerConfiguration(): void {
         const config = {
             taskQueue: this.options.taskQueue,
-            namespace: this.options.namespace || DEFAULT_NAMESPACE,
+            namespace: this.options.connection?.namespace || DEFAULT_NAMESPACE,
             workflowSource: this.options.workflowBundle ? 'bundle' : 'filesystem',
             activitiesCount: Object.keys(this.activities).length,
             autoStart: this.options.autoStart !== false,
@@ -279,6 +305,10 @@ export class WorkerManager implements OnModuleInit, OnModuleDestroy, OnApplicati
             }
         }
     }
+
+    // ==========================================
+    // Worker Management
+    // ==========================================
 
     /**
      * Start the worker with enhanced error handling
@@ -342,6 +372,23 @@ export class WorkerManager implements OnModuleInit, OnModuleDestroy, OnApplicati
         this.startedAt = undefined;
     }
 
+    /**
+     * Restart the worker (useful for configuration changes)
+     */
+    async restartWorker(): Promise<void> {
+        this.logger.log('Restarting worker...');
+
+        if (this.isRunning) {
+            await this.shutdown();
+        }
+
+        await this.initializeWorker();
+
+        if (this.options.autoStart !== false) {
+            await this.startWorker();
+        }
+    }
+
     // ==========================================
     // Public API Methods
     // ==========================================
@@ -385,7 +432,7 @@ export class WorkerManager implements OnModuleInit, OnModuleDestroy, OnApplicati
             isRunning: this.isRunning,
             isHealthy: this.isInitialized && !this.lastError,
             taskQueue: this.options.taskQueue,
-            namespace: this.options.namespace || DEFAULT_NAMESPACE,
+            namespace: this.options.connection?.namespace || DEFAULT_NAMESPACE,
             workflowSource: this.options.workflowBundle
                 ? 'bundle'
                 : this.options.workflowsPath
@@ -406,20 +453,40 @@ export class WorkerManager implements OnModuleInit, OnModuleDestroy, OnApplicati
     }
 
     /**
-     * Restart the worker (useful for configuration changes)
+     * Get detailed activity information
      */
-    async restartWorker(): Promise<void> {
-        this.logger.log('Restarting worker...');
+    getActivityInfo(): Array<{
+        name: string;
+        className: string;
+        methodName: string;
+    }> {
+        const activityInfo: Array<{
+            name: string;
+            className: string;
+            methodName: string;
+        }> = [];
 
-        if (this.isRunning) {
-            await this.shutdown();
+        const providers = this.discoveryService.getProviders();
+
+        for (const wrapper of providers) {
+            const { instance } = wrapper;
+            if (!instance || !this.metadataAccessor.isActivity(instance.constructor)) {
+                continue;
+            }
+
+            const className = instance.constructor.name;
+            const methodNames = this.metadataAccessor.getActivityMethodNames(instance.constructor);
+
+            for (const methodName of methodNames) {
+                activityInfo.push({
+                    name: methodName,
+                    className,
+                    methodName,
+                });
+            }
         }
 
-        await this.initializeWorker();
-
-        if (this.options.autoStart !== false) {
-            await this.startWorker();
-        }
+        return activityInfo;
     }
 
     /**
@@ -428,8 +495,13 @@ export class WorkerManager implements OnModuleInit, OnModuleDestroy, OnApplicati
     async healthCheck(): Promise<{
         status: 'healthy' | 'unhealthy' | 'degraded';
         details: WorkerStatus;
+        activities: {
+            total: number;
+            registered: string[];
+        };
     }> {
         const status = this.getWorkerStatus();
+        const activities = this.getRegisteredActivities();
 
         let healthStatus: 'healthy' | 'unhealthy' | 'degraded';
 
@@ -446,6 +518,10 @@ export class WorkerManager implements OnModuleInit, OnModuleDestroy, OnApplicati
         return {
             status: healthStatus,
             details: status,
+            activities: {
+                total: activities.length,
+                registered: activities,
+            },
         };
     }
 }

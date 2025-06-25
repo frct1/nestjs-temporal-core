@@ -1,0 +1,106 @@
+# Compiled output
+/dist
+/build
+*.tsbuildinfo
+
+# Dependencies
+node_modules
+/.pnp
+.pnp.js
+
+# Coverage directory used by tools like istanbul
+coverage
+/.nyc_output
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Logs
+logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE and editor files
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.idea
+*.swp
+*.swo
+*~
+
+# Package manager files
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+.npmrc
+
+# Environment files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Documentation with specific formatting
+CHANGELOG.md
+HISTORY.md
+
+# License file (often has specific formatting)
+LICENSE
+LICENSE.md
+LICENSE.txt
+
+# Configuration files that might need specific formatting
+.gitignore
+.eslintignore
+.prettierignore
+
+# Generated type definitions
+*.d.ts.map
+
+# Temporal-specific
+# Workflow bundles (compiled/bundled workflow code)
+**/workflows-bundle.js
+**/workflows.bundle.js
+
+# Test files that might have specific formatting requirements
+**/*.snap
+
+# Documentation files that might use specific markdown formatting
+docs/**/*.md
+*.md
+
+# Any generated files
+generated/
+auto-generated/
+
+# Binary files
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.ico
+*.svg
+*.woff
+*.woff2
+*.ttf
+*.eot

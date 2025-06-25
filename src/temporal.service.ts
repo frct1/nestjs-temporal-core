@@ -1,10 +1,5 @@
 import { Injectable, OnModuleInit, Logger, Optional } from '@nestjs/common';
-import { TemporalClientService } from './client/temporal-client.service';
-import { TemporalScheduleService } from './client/temporal-schedule.service';
-import { WorkerManager } from './worker/worker-manager.service';
-import { WorkflowDiscoveryService } from './discovery/workflow-discovery.service';
-import { ScheduleManagerService } from './discovery/schedule-manager.service';
-import { LOG_CATEGORIES, DEFAULT_TASK_QUEUE } from './constants';
+import { DEFAULT_TASK_QUEUE } from './constants';
 import {
     StartWorkflowOptions,
     DiscoveryStats,
@@ -12,10 +7,14 @@ import {
     WorkflowMethodInfo,
     ScheduledMethodInfo,
     WorkerStatus,
+    SystemStatus,
 } from './interfaces';
+import { TemporalClientService, TemporalScheduleService } from './client';
+import { TemporalDiscoveryService, TemporalScheduleManagerService } from './discovery';
+import { TemporalWorkerManagerService } from './worker';
 
 /**
- * Enhanced unified service for interacting with Temporal
+ * Streamlined unified service for interacting with Temporal
  *
  * Provides comprehensive access to all Temporal functionality:
  * - Client operations (start workflows, send signals, execute queries)
@@ -48,14 +47,14 @@ import {
  */
 @Injectable()
 export class TemporalService implements OnModuleInit {
-    private readonly logger = new Logger(LOG_CATEGORIES.CLIENT);
+    private readonly logger = new Logger(TemporalService.name);
 
     constructor(
         private readonly clientService: TemporalClientService,
         private readonly scheduleService: TemporalScheduleService,
-        private readonly workflowDiscovery: WorkflowDiscoveryService,
-        private readonly scheduleManager: ScheduleManagerService,
-        @Optional() private readonly workerManager?: WorkerManager,
+        private readonly discoveryService: TemporalDiscoveryService,
+        private readonly scheduleManager: TemporalScheduleManagerService,
+        @Optional() private readonly workerManager?: TemporalWorkerManagerService,
     ) {}
 
     async onModuleInit() {
@@ -83,21 +82,21 @@ export class TemporalService implements OnModuleInit {
     /**
      * Get the schedule manager service for discovered schedules
      */
-    getScheduleManager(): ScheduleManagerService {
+    getScheduleManager(): TemporalScheduleManagerService {
         return this.scheduleManager;
     }
 
     /**
      * Get the workflow discovery service for introspection
      */
-    getWorkflowDiscovery(): WorkflowDiscoveryService {
-        return this.workflowDiscovery;
+    getDiscoveryService(): TemporalDiscoveryService {
+        return this.discoveryService;
     }
 
     /**
      * Get the worker manager if available
      */
-    getWorkerManager(): WorkerManager | undefined {
+    getWorkerManager(): TemporalWorkerManagerService | undefined {
         return this.workerManager;
     }
 
@@ -225,7 +224,7 @@ export class TemporalService implements OnModuleInit {
             return;
         }
 
-        await this.scheduleManager.deleteSchedule(scheduleId);
+        await this.scheduleManager.deleteSchedule(scheduleId, force);
         this.logger.log(`Deleted schedule: ${scheduleId}`);
     }
 
@@ -237,14 +236,14 @@ export class TemporalService implements OnModuleInit {
      * Get all available workflow types from discovered controllers
      */
     getAvailableWorkflows(): string[] {
-        return this.workflowDiscovery.getWorkflowNames();
+        return this.discoveryService.getWorkflowNames();
     }
 
     /**
      * Get detailed information about a specific workflow
      */
     getWorkflowInfo(workflowName: string): WorkflowMethodInfo | undefined {
-        return this.workflowDiscovery.getWorkflowMethod(workflowName);
+        return this.discoveryService.getWorkflowMethod(workflowName);
     }
 
     /**
@@ -258,14 +257,14 @@ export class TemporalService implements OnModuleInit {
      * Get detailed information about a specific schedule
      */
     getScheduleInfo(scheduleId: string): ScheduledMethodInfo | undefined {
-        return this.workflowDiscovery.getScheduledWorkflow(scheduleId);
+        return this.discoveryService.getScheduledWorkflow(scheduleId);
     }
 
     /**
      * Check if a workflow type is available
      */
     hasWorkflow(workflowName: string): boolean {
-        return this.workflowDiscovery.hasWorkflow(workflowName);
+        return this.discoveryService.hasWorkflow(workflowName);
     }
 
     /**
@@ -328,7 +327,7 @@ export class TemporalService implements OnModuleInit {
      * Get comprehensive discovery statistics
      */
     getDiscoveryStats(): DiscoveryStats {
-        return this.workflowDiscovery.getStats();
+        return this.discoveryService.getStats();
     }
 
     /**
@@ -341,26 +340,14 @@ export class TemporalService implements OnModuleInit {
     /**
      * Get comprehensive system status
      */
-    async getSystemStatus(): Promise<{
-        client: {
-            available: boolean;
-            healthy: boolean;
-        };
-        worker: {
-            available: boolean;
-            status?: WorkerStatus;
-            health?: string;
-        };
-        discovery: DiscoveryStats;
-        schedules: ScheduleStats;
-    }> {
+    async getSystemStatus(): Promise<SystemStatus> {
         const clientAvailable = Boolean(this.clientService.getRawClient());
         const workerHealth = await this.getWorkerHealth();
 
         return {
             client: {
                 available: clientAvailable,
-                healthy: clientAvailable,
+                healthy: this.clientService.isHealthy(),
             },
             worker: {
                 available: this.hasWorker(),
@@ -369,6 +356,60 @@ export class TemporalService implements OnModuleInit {
             },
             discovery: this.getDiscoveryStats(),
             schedules: this.getScheduleStats(),
+        };
+    }
+
+    /**
+     * Get overall health status for monitoring
+     */
+    async getOverallHealth(): Promise<{
+        status: 'healthy' | 'degraded' | 'unhealthy';
+        components: {
+            client: { status: string; healthy: boolean };
+            worker: { status: string; available: boolean };
+            discovery: { status: string; controllers: number };
+            schedules: { status: string; active: number; errors: number };
+        };
+    }> {
+        const systemStatus = await this.getSystemStatus();
+        const discoveryHealth = this.discoveryService.getHealthStatus();
+        const scheduleHealth = this.scheduleManager.getHealthStatus();
+
+        const components = {
+            client: {
+                status: systemStatus.client.healthy ? 'healthy' : 'unhealthy',
+                healthy: systemStatus.client.healthy,
+            },
+            worker: {
+                status: systemStatus.worker.health || 'not_available',
+                available: systemStatus.worker.available,
+            },
+            discovery: {
+                status: discoveryHealth.status,
+                controllers: discoveryHealth.discoveredItems.controllers,
+            },
+            schedules: {
+                status: scheduleHealth.status,
+                active: scheduleHealth.activeSchedules,
+                errors: scheduleHealth.errorCount,
+            },
+        };
+
+        // Determine overall status
+        let overallStatus: 'healthy' | 'degraded' | 'unhealthy' = 'healthy';
+
+        if (!systemStatus.client.healthy) {
+            overallStatus = 'unhealthy';
+        } else if (
+            scheduleHealth.status === 'unhealthy' ||
+            systemStatus.worker.health === 'unhealthy'
+        ) {
+            overallStatus = 'degraded';
+        }
+
+        return {
+            status: overallStatus,
+            components,
         };
     }
 
@@ -383,11 +424,11 @@ export class TemporalService implements OnModuleInit {
         workflowType: string,
         options: Partial<StartWorkflowOptions>,
     ): Promise<StartWorkflowOptions> {
-        const workflowInfo = this.workflowDiscovery.getWorkflowMethod(workflowType);
+        const workflowInfo = this.discoveryService.getWorkflowMethod(workflowType);
 
         if (workflowInfo) {
             // Find the controller for this workflow to get default task queue
-            const controllers = this.workflowDiscovery.getWorkflowControllers();
+            const controllers = this.discoveryService.getWorkflowControllers();
             const controller = controllers.find((c) =>
                 c.methods.some((m) => m.workflowName === workflowType),
             );
@@ -435,7 +476,7 @@ export class TemporalService implements OnModuleInit {
         const stats = this.getDiscoveryStats();
         const scheduleStats = this.getScheduleStats();
 
-        this.logger.log('Enhanced Temporal service initialized');
+        this.logger.log('Streamlined Temporal service initialized');
         this.logger.log(
             `Discovered: ${stats.controllers} controllers, ${stats.methods} workflows, ${stats.scheduled} scheduled`,
         );

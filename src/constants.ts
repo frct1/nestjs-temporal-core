@@ -1,46 +1,30 @@
-/**
- * Constants used throughout the NestJS Temporal integration
- */
-
 // ==========================================
-// Module Configuration & Injection Tokens
+// Module & Injection Tokens
 // ==========================================
 export const TEMPORAL_MODULE_OPTIONS = 'TEMPORAL_MODULE_OPTIONS';
-export const TEMPORAL_CLIENT_MODULE_OPTIONS = 'TEMPORAL_CLIENT_MODULE_OPTIONS';
-export const TEMPORAL_WORKER_MODULE_OPTIONS = 'TEMPORAL_WORKER_MODULE_OPTIONS';
 export const TEMPORAL_CLIENT = 'TEMPORAL_CLIENT';
 export const TEMPORAL_CONNECTION = 'TEMPORAL_CONNECTION';
 
 // ==========================================
-// Class-Level Metadata Keys
+// Metadata Keys
 // ==========================================
 export const TEMPORAL_ACTIVITY = 'TEMPORAL_ACTIVITY';
-export const TEMPORAL_WORKFLOW = 'TEMPORAL_WORKFLOW';
-export const TEMPORAL_WORKFLOW_CONTROLLER = 'TEMPORAL_WORKFLOW_CONTROLLER';
-
-// ==========================================
-// Method-Level Metadata Keys
-// ==========================================
 export const TEMPORAL_ACTIVITY_METHOD = 'TEMPORAL_ACTIVITY_METHOD';
-export const TEMPORAL_ACTIVITY_METHOD_NAME = 'TEMPORAL_ACTIVITY_METHOD_NAME';
-export const TEMPORAL_ACTIVITY_METHOD_OPTIONS = 'TEMPORAL_ACTIVITY_METHOD_OPTIONS';
-
+export const TEMPORAL_WORKFLOW_CONTROLLER = 'TEMPORAL_WORKFLOW_CONTROLLER';
 export const TEMPORAL_WORKFLOW_METHOD = 'TEMPORAL_WORKFLOW_METHOD';
-export const TEMPORAL_WORKFLOW_METHOD_NAME = 'TEMPORAL_WORKFLOW_METHOD_NAME';
-export const TEMPORAL_WORKFLOW_METHOD_OPTIONS = 'TEMPORAL_WORKFLOW_METHOD_OPTIONS';
-export const TEMPORAL_WORKFLOW_OPTIONS = 'TEMPORAL_WORKFLOW_OPTIONS';
-
 export const TEMPORAL_SIGNAL_METHOD = 'TEMPORAL_SIGNAL_METHOD';
-export const TEMPORAL_SIGNAL_NAME = 'TEMPORAL_SIGNAL_NAME';
-
 export const TEMPORAL_QUERY_METHOD = 'TEMPORAL_QUERY_METHOD';
-export const TEMPORAL_QUERY_NAME = 'TEMPORAL_QUERY_NAME';
-
 export const TEMPORAL_SCHEDULED_WORKFLOW = 'TEMPORAL_SCHEDULED_WORKFLOW';
-export const TEMPORAL_WORKFLOW_STARTER = 'TEMPORAL_WORKFLOW_STARTER';
+
+// Parameter decorator metadata keys
+export const WORKFLOW_PARAMS_METADATA = 'workflow:params';
+export const WORKFLOW_CONTEXT_METADATA = 'workflow:context';
+export const WORKFLOW_ID_METADATA = 'workflow:id';
+export const RUN_ID_METADATA = 'workflow:runId';
+export const TASK_QUEUE_METADATA = 'workflow:taskQueue';
 
 // ==========================================
-// Default Configuration Values
+// Defaults
 // ==========================================
 export const DEFAULT_NAMESPACE = 'default';
 export const DEFAULT_TASK_QUEUE = 'default-task-queue';
@@ -107,72 +91,6 @@ export const INTERVAL_EXPRESSIONS = {
 } as const;
 
 // ==========================================
-// Workflow Policies
-// ==========================================
-export enum WorkflowIdReusePolicy {
-    ALLOW_DUPLICATE = 0,
-    ALLOW_DUPLICATE_FAILED_ONLY = 1,
-    REJECT_DUPLICATE = 2,
-    TERMINATE_IF_RUNNING = 3,
-}
-
-export enum WorkflowIdConflictPolicy {
-    REJECT_DUPLICATE = 'REJECT_DUPLICATE',
-    TERMINATE_IF_RUNNING = 'TERMINATE_IF_RUNNING',
-    ALLOW_DUPLICATE = 'ALLOW_DUPLICATE',
-}
-
-export enum ScheduleOverlapPolicy {
-    ALLOW_ALL = 'ALLOW_ALL',
-    SKIP = 'SKIP',
-    BUFFER_ONE = 'BUFFER_ONE',
-    BUFFER_ALL = 'BUFFER_ALL',
-    CANCEL_OTHER = 'CANCEL_OTHER',
-}
-
-// ==========================================
-// Error Messages & Codes
-// ==========================================
-export const ERRORS = {
-    // Client Errors
-    CLIENT_INITIALIZATION: 'Failed to initialize Temporal client',
-    CLIENT_NOT_INITIALIZED: 'Temporal client not initialized',
-
-    // Worker Errors
-    WORKER_INITIALIZATION: 'Failed to initialize Temporal worker',
-    WORKER_NOT_INITIALIZED: 'Temporal worker not initialized',
-
-    // Configuration Errors
-    INVALID_OPTIONS: 'Invalid Temporal module options',
-    MISSING_TASK_QUEUE: 'Task queue is required',
-    MISSING_WORKFLOW_TYPE: 'Workflow type is required',
-    MISSING_SCHEDULE_ID: 'Schedule ID is required',
-
-    // Discovery Errors
-    ACTIVITY_NOT_FOUND: 'Activity not found',
-    WORKFLOW_NOT_FOUND: 'Workflow not found',
-    WORKFLOW_CONTROLLER_NOT_FOUND: 'Workflow controller not found',
-    DUPLICATE_WORKFLOW_NAME: 'Duplicate workflow name found',
-
-    // Schedule Errors
-    SCHEDULE_CLIENT_NOT_INITIALIZED: 'Temporal schedule client not initialized',
-    INVALID_SCHEDULE_OPTIONS: 'Invalid schedule options',
-    INVALID_CRON_EXPRESSION: 'Invalid cron expression',
-    SCHEDULE_ALREADY_EXISTS: 'Schedule already exists',
-    SCHEDULE_NOT_FOUND: 'Schedule not found',
-
-    // Workflow Execution Errors
-    WORKFLOW_EXECUTION_FAILED: 'Workflow execution failed',
-    SIGNAL_DELIVERY_FAILED: 'Signal delivery failed',
-    QUERY_EXECUTION_FAILED: 'Query execution failed',
-
-    // Activity Execution Errors
-    ACTIVITY_EXECUTION_FAILED: 'Activity execution failed',
-    ACTIVITY_TIMEOUT: 'Activity execution timeout',
-    ACTIVITY_RETRY_EXHAUSTED: 'Activity retry attempts exhausted',
-} as const;
-
-// ==========================================
 // Common Timeout Values
 // ==========================================
 export const TIMEOUTS = {
@@ -197,7 +115,7 @@ export const TIMEOUTS = {
 } as const;
 
 // ==========================================
-// Retry Configuration Presets
+// Retry Policy Presets
 // ==========================================
 export const RETRY_POLICIES = {
     // Quick retry for transient failures
@@ -272,6 +190,71 @@ export const WORKER_PRESETS = {
 } as const;
 
 // ==========================================
+// Error Messages
+// ==========================================
+export const ERRORS = {
+    // Client Errors
+    CLIENT_INITIALIZATION: 'Failed to initialize Temporal client',
+    CLIENT_NOT_INITIALIZED: 'Temporal client not initialized',
+
+    // Worker Errors
+    WORKER_INITIALIZATION: 'Failed to initialize Temporal worker',
+    WORKER_NOT_INITIALIZED: 'Temporal worker not initialized',
+
+    // Configuration Errors
+    INVALID_OPTIONS: 'Invalid Temporal module options',
+    MISSING_TASK_QUEUE: 'Task queue is required',
+    MISSING_WORKFLOW_TYPE: 'Workflow type is required',
+    MISSING_SCHEDULE_ID: 'Schedule ID is required',
+
+    // Discovery Errors
+    ACTIVITY_NOT_FOUND: 'Activity not found',
+    WORKFLOW_NOT_FOUND: 'Workflow not found',
+    DUPLICATE_WORKFLOW_NAME: 'Duplicate workflow name found',
+
+    // Schedule Errors
+    SCHEDULE_CLIENT_NOT_INITIALIZED: 'Temporal schedule client not initialized',
+    INVALID_SCHEDULE_OPTIONS: 'Invalid schedule options',
+    INVALID_CRON_EXPRESSION: 'Invalid cron expression',
+    SCHEDULE_ALREADY_EXISTS: 'Schedule already exists',
+    SCHEDULE_NOT_FOUND: 'Schedule not found',
+
+    // Workflow Execution Errors
+    WORKFLOW_EXECUTION_FAILED: 'Workflow execution failed',
+    SIGNAL_DELIVERY_FAILED: 'Signal delivery failed',
+    QUERY_EXECUTION_FAILED: 'Query execution failed',
+
+    // Activity Execution Errors
+    ACTIVITY_EXECUTION_FAILED: 'Activity execution failed',
+    ACTIVITY_TIMEOUT: 'Activity execution timeout',
+    ACTIVITY_RETRY_EXHAUSTED: 'Activity retry attempts exhausted',
+} as const;
+
+// ==========================================
+// Workflow Policies
+// ==========================================
+export enum WorkflowIdReusePolicy {
+    ALLOW_DUPLICATE = 0,
+    ALLOW_DUPLICATE_FAILED_ONLY = 1,
+    REJECT_DUPLICATE = 2,
+    TERMINATE_IF_RUNNING = 3,
+}
+
+export enum WorkflowIdConflictPolicy {
+    REJECT_DUPLICATE = 'REJECT_DUPLICATE',
+    TERMINATE_IF_RUNNING = 'TERMINATE_IF_RUNNING',
+    ALLOW_DUPLICATE = 'ALLOW_DUPLICATE',
+}
+
+export enum ScheduleOverlapPolicy {
+    ALLOW_ALL = 'ALLOW_ALL',
+    SKIP = 'SKIP',
+    BUFFER_ONE = 'BUFFER_ONE',
+    BUFFER_ALL = 'BUFFER_ALL',
+    CANCEL_OTHER = 'CANCEL_OTHER',
+}
+
+// ==========================================
 // Logging Categories
 // ==========================================
 export const LOG_CATEGORIES = {
@@ -281,27 +264,4 @@ export const LOG_CATEGORIES = {
     SCHEDULE: 'ScheduleManager',
     ACTIVITY: 'ActivityExecution',
     WORKFLOW: 'WorkflowExecution',
-} as const;
-
-// ==========================================
-// Metrics & Monitoring
-// ==========================================
-export const METRICS = {
-    // Counter metrics
-    WORKFLOW_STARTED: 'temporal_workflow_started_total',
-    WORKFLOW_COMPLETED: 'temporal_workflow_completed_total',
-    WORKFLOW_FAILED: 'temporal_workflow_failed_total',
-    ACTIVITY_STARTED: 'temporal_activity_started_total',
-    ACTIVITY_COMPLETED: 'temporal_activity_completed_total',
-    ACTIVITY_FAILED: 'temporal_activity_failed_total',
-
-    // Histogram metrics
-    WORKFLOW_DURATION: 'temporal_workflow_duration_seconds',
-    ACTIVITY_DURATION: 'temporal_activity_duration_seconds',
-    QUEUE_TIME: 'temporal_queue_time_seconds',
-
-    // Gauge metrics
-    ACTIVE_WORKFLOWS: 'temporal_active_workflows',
-    ACTIVE_ACTIVITIES: 'temporal_active_activities',
-    WORKER_CAPACITY: 'temporal_worker_capacity',
 } as const;
