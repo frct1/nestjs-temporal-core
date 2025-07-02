@@ -23,7 +23,8 @@ NestJS Temporal Core brings Temporal's durable execution to NestJS with familiar
 - **⚙️ Flexible Setup** - Client-only, worker-only, or unified deployments
 - **🏥 Health Monitoring** - Comprehensive status monitoring and health checks
 - **🔧 Production Ready** - TLS, connection management, graceful shutdowns
-- **📊 Complete Integration** - Full-featured module architecture
+- **📊 Modular Architecture** - Individual modules for specific needs
+- **🔐 Enterprise Ready** - Temporal Cloud support with TLS and API keys
 
 ## 📦 Installation
 
@@ -33,7 +34,9 @@ npm install nestjs-temporal-core @temporalio/client @temporalio/worker @temporal
 
 ## 🚀 Quick Start
 
-### 1. Module Setup
+### 1. Complete Integration (Recommended)
+
+For applications that need full Temporal functionality:
 
 ```typescript
 // app.module.ts
@@ -48,294 +51,505 @@ import { EmailActivities } from './activities/email.activities';
         address: 'localhost:7233',
         namespace: 'default',
       },
-      taskQueue: 'my-app',
+      taskQueue: 'main-queue',
       worker: {
         workflowsPath: './dist/workflows',
-        activityClasses: [EmailActivities], // Auto-discovered
-      },
-    }),
+        activityClasses: [EmailActivities],
+        autoStart: true
+      }
+    })
   ],
-  providers: [EmailActivities],
+  providers: [EmailActivities], // Auto-discovered
 })
 export class AppModule {}
 ```
 
-### 2. Create Activities
+### 2. Define Activities
 
 ```typescript
 // activities/email.activities.ts
 import { Injectable } from '@nestjs/common';
 import { Activity, ActivityMethod } from 'nestjs-temporal-core';
 
-@Injectable()
 @Activity()
+@Injectable()
 export class EmailActivities {
-  @ActivityMethod()
-  async sendWelcomeEmail(email: string, name: string): Promise<boolean> {
-    console.log(`Sending welcome email to ${email}`);
-    // Your email logic here
-    return true;
+  
+  @ActivityMethod({
+    name: 'sendEmail',
+    timeout: '30s',
+    maxRetries: 3
+  })
+  async sendEmail(to: string, subject: string, body: string): Promise<void> {
+    console.log(`Sending email to ${to}: ${subject}`);
+    // Your email sending logic here
   }
 
-  @ActivityMethod()
-  async sendNotification(email: string, message: string): Promise<void> {
-    console.log(`Notification to ${email}: ${message}`);
+  @ActivityMethod('sendNotification')
+  async sendNotification(userId: string, message: string): Promise<void> {
+    console.log(`Notifying user ${userId}: ${message}`);
     // Your notification logic here
   }
 }
 ```
 
-### 3. Create Scheduled Workflows
+### 3. Create Workflows
+
+```typescript
+// workflows/email.workflow.ts
+import { proxyActivities } from '@temporalio/workflow';
+import type { EmailActivities } from '../activities/email.activities';
+
+const { sendEmail, sendNotification } = proxyActivities<EmailActivities>({
+  startToCloseTimeout: '1 minute',
+});
+
+export async function processEmailWorkflow(
+  userId: string,
+  emailData: { to: string; subject: string; body: string }
+): Promise<void> {
+  // Send email
+  await sendEmail(emailData.to, emailData.subject, emailData.body);
+  
+  // Send notification
+  await sendNotification(userId, 'Email sent successfully');
+}
+```
+
+### 4. Schedule Workflows
 
 ```typescript
 // services/scheduled.service.ts
 import { Injectable } from '@nestjs/common';
-import { Cron, Interval } from 'nestjs-temporal-core';
+import { Scheduled, Cron, Interval, CRON_EXPRESSIONS } from 'nestjs-temporal-core';
 
 @Injectable()
 export class ScheduledService {
-  // Automatic scheduling - runs at 9 AM daily
-  @Cron('0 9 * * *', { 
-    scheduleId: 'daily-user-report',
-    description: 'Generate daily user report'
+  
+  @Scheduled({
+    scheduleId: 'daily-report',
+    cron: CRON_EXPRESSIONS.DAILY_8AM,
+    description: 'Generate daily sales report',
+    taskQueue: 'reports'
   })
   async generateDailyReport(): Promise<void> {
-    console.log('Generating daily user report...');
-    // Report generation logic
+    console.log('Generating daily report...');
+    // Your report generation logic
   }
 
-  // Interval-based scheduling - runs every hour
-  @Interval('1h', {
-    scheduleId: 'hourly-cleanup',
-    description: 'Hourly cleanup task'
+  @Cron(CRON_EXPRESSIONS.WEEKLY_MONDAY_9AM, {
+    scheduleId: 'weekly-cleanup'
   })
-  async cleanupTask(): Promise<void> {
-    console.log('Running cleanup task...');
-    // Cleanup logic
+  async performWeeklyCleanup(): Promise<void> {
+    console.log('Performing weekly cleanup...');
+    // Your cleanup logic
+  }
+
+  @Interval('5m', {
+    scheduleId: 'health-check'
+  })
+  async performHealthCheck(): Promise<void> {
+    console.log('Performing health check...');
+    // Your health check logic
   }
 }
 ```
 
-### 4. Use in Services
+### 5. Use in Services
 
 ```typescript
-// services/user.service.ts
+// services/order.service.ts
 import { Injectable } from '@nestjs/common';
 import { TemporalService } from 'nestjs-temporal-core';
 
 @Injectable()
-export class UserService {
+export class OrderService {
   constructor(private readonly temporal: TemporalService) {}
 
-  async processUser(email: string, name: string): Promise<string> {
-    // Start workflow directly with client
+  async createOrder(orderData: any) {
     const { workflowId } = await this.temporal.startWorkflow(
-      'processUser', 
-      [email, name],
-      { 
-        taskQueue: 'user-processing',
-        workflowId: `user-${email}-${Date.now()}` 
+      'processOrder',
+      [orderData],
+      {
+        taskQueue: 'orders',
+        workflowId: `order-${orderData.id}`,
+        searchAttributes: {
+          'customer-id': orderData.customerId
+        }
       }
     );
 
-    return workflowId;
+    return { workflowId };
   }
 
-  async getUserStatus(workflowId: string): Promise<string> {
-    return await this.temporal.queryWorkflow(workflowId, 'getStatus');
+  async cancelOrder(orderId: string) {
+    await this.temporal.signalWorkflow(`order-${orderId}`, 'cancel');
+    return { cancelled: true };
   }
 
-  async updateUserStatus(workflowId: string, status: string): Promise<void> {
-    await this.temporal.signalWorkflow(workflowId, 'updateStatus', [status]);
-  }
-
-  // Schedule management
-  async pauseDailyReport(): Promise<void> {
-    await this.temporal.pauseSchedule('daily-user-report', 'Maintenance mode');
-  }
-
-  async resumeDailyReport(): Promise<void> {
-    await this.temporal.resumeSchedule('daily-user-report');
+  async getOrderStatus(orderId: string) {
+    const status = await this.temporal.queryWorkflow(`order-${orderId}`, 'getStatus');
+    return status;
   }
 }
 ```
 
-## ⚙️ Configuration Options
+## 🏗️ Integration Patterns
 
-### Basic Configuration
+### Client-Only Integration
 
-```typescript
-TemporalModule.register({
-  connection: {
-    address: 'localhost:7233',
-    namespace: 'default',
-  },
-  taskQueue: 'my-app',
-  worker: {
-    workflowsPath: './dist/workflows',
-    activityClasses: [EmailActivities, PaymentActivities],
-  },
-});
-```
-
-### Client-Only Mode
+For applications that only start workflows (e.g., web APIs):
 
 ```typescript
-TemporalModule.forClient({
-  connection: {
-    address: 'temporal.company.com:7233',
-    namespace: 'production',
-    tls: true,
-  },
-});
+import { TemporalClientModule } from 'nestjs-temporal-core';
+
+@Module({
+  imports: [
+    TemporalClientModule.forRoot({
+      connection: {
+        address: 'localhost:7233',
+        namespace: 'production'
+      }
+    })
+  ],
+  providers: [ApiService],
+})
+export class ClientOnlyModule {}
 ```
 
-### Worker-Only Mode
+### Worker-Only Integration
+
+For dedicated worker processes:
 
 ```typescript
-TemporalModule.forWorker({
-  connection: {
-    address: 'localhost:7233',
-    namespace: 'development',
-  },
-  taskQueue: 'worker-queue',
-  workflowsPath: './dist/workflows',
-  activityClasses: [ProcessingActivities],
-});
+import { TemporalWorkerModule, WORKER_PRESETS } from 'nestjs-temporal-core';
+
+@Module({
+  imports: [
+    TemporalWorkerModule.forRoot({
+      connection: {
+        address: 'localhost:7233',
+        namespace: 'production'
+      },
+      taskQueue: 'worker-queue',
+      workflowsPath: './dist/workflows',
+      activityClasses: [ProcessingActivities],
+      workerOptions: WORKER_PRESETS.PRODUCTION_HIGH_THROUGHPUT
+    })
+  ],
+  providers: [ProcessingActivities],
+})
+export class WorkerOnlyModule {}
 ```
+
+### Modular Integration
+
+Using individual modules for specific needs:
+
+```typescript
+import { 
+  TemporalClientModule,
+  TemporalActivityModule,
+  TemporalSchedulesModule 
+} from 'nestjs-temporal-core';
+
+@Module({
+  imports: [
+    // Client for workflow operations
+    TemporalClientModule.forRoot({
+      connection: { address: 'localhost:7233' }
+    }),
+    
+    // Activities management
+    TemporalActivityModule.forRoot({
+      activityClasses: [EmailActivities, PaymentActivities]
+    }),
+    
+    // Schedule management
+    TemporalSchedulesModule.forRoot({
+      autoStart: true,
+      defaultTimezone: 'UTC'
+    }),
+  ],
+  providers: [EmailActivities, PaymentActivities, ScheduledService],
+})
+export class ModularIntegrationModule {}
+```
+
+## ⚙️ Configuration
 
 ### Async Configuration
 
 ```typescript
-TemporalModule.registerAsync({
-  imports: [ConfigModule],
-  useFactory: (config: ConfigService) => ({
-    connection: {
-      address: config.get('TEMPORAL_ADDRESS'),
-      namespace: config.get('TEMPORAL_NAMESPACE'),
-    },
-    taskQueue: config.get('TEMPORAL_TASK_QUEUE'),
-    worker: {
-      workflowsPath: './dist/workflows',
-      activityClasses: [EmailActivities],
-    },
-  }),
-  inject: [ConfigService],
-});
+import { ConfigModule, ConfigService } from '@nestjs/config';
+
+@Module({
+  imports: [
+    ConfigModule.forRoot(),
+    TemporalModule.registerAsync({
+      imports: [ConfigModule],
+      useFactory: async (config: ConfigService) => ({
+        connection: {
+          address: config.get('TEMPORAL_ADDRESS'),
+          namespace: config.get('TEMPORAL_NAMESPACE'),
+          tls: config.get('TEMPORAL_TLS_ENABLED') === 'true',
+          apiKey: config.get('TEMPORAL_API_KEY'),
+        },
+        taskQueue: config.get('TEMPORAL_TASK_QUEUE'),
+        worker: {
+          workflowsPath: config.get('WORKFLOWS_PATH'),
+          activityClasses: [EmailActivities, PaymentActivities],
+          autoStart: config.get('WORKER_AUTO_START') !== 'false',
+        }
+      }),
+      inject: [ConfigService],
+    })
+  ],
+})
+export class AppModule {}
 ```
 
-## 📋 Core Concepts
+### Environment-Specific Configurations
 
-### Auto-Discovery
-The module automatically discovers and registers:
-- **Activity Classes** marked with `@Activity` 
-- **Scheduled Workflows** marked with `@Cron` or `@Interval`
-- **Signals and Queries** within classes
-
-### Scheduling Made Simple
 ```typescript
-// Just add the decorator - schedule is created automatically!
-@Cron('0 8 * * *', { scheduleId: 'daily-report' })
-async generateReport(): Promise<void> {
-  // This will run every day at 8 AM
-}
-```
-
-## 🔧 Common Use Cases
-
-### Scheduled Reports
-```typescript
-@Injectable()
-export class ReportService {
-  @Cron('0 0 * * 0', { scheduleId: 'weekly-sales-report' })
-  async generateWeeklySalesReport(): Promise<void> {
-    // Automatically runs every Sunday at midnight
-    console.log('Generating weekly sales report...');
+// Development
+const developmentConfig = {
+  connection: {
+    address: 'localhost:7233',
+    namespace: 'development'
+  },
+  taskQueue: 'dev-queue',
+  worker: {
+    workflowsPath: './dist/workflows',
+    workerOptions: WORKER_PRESETS.DEVELOPMENT
   }
-}
+};
+
+// Production
+const productionConfig = {
+  connection: {
+    address: process.env.TEMPORAL_ADDRESS!,
+    namespace: process.env.TEMPORAL_NAMESPACE!,
+    tls: true,
+    apiKey: process.env.TEMPORAL_API_KEY
+  },
+  taskQueue: process.env.TEMPORAL_TASK_QUEUE!,
+  worker: {
+    workflowBundle: require('../workflows/bundle'), // Pre-bundled
+    workerOptions: WORKER_PRESETS.PRODUCTION_BALANCED
+  }
+};
 ```
 
-### Data Processing
-```typescript
-@Injectable()
-@Activity()
-export class DataProcessingActivities {
-  @ActivityMethod()
-  async processFile(filePath: string): Promise<string> {
-    console.log(`Processing file: ${filePath}`);
-    // File processing logic
-    return 'processed';
-  }
+## 📊 Health Monitoring
 
-  @ActivityMethod()
-  async sendNotification(message: string): Promise<void> {
-    console.log(`Sending notification: ${message}`);
-    // Notification logic
-  }
-}
-```
-
-### Monitoring Tasks
-```typescript
-@Injectable()
-export class MonitoringService {
-  @Interval('5m', {
-    scheduleId: 'health-check',
-    description: 'Health check every 5 minutes'
-  })
-  async healthCheck(): Promise<void> {
-    console.log('Running health check...');
-    // Health check logic
-  }
-}
-```
-
-## 📊 Monitoring & Health Checks
+Built-in health monitoring for production environments:
 
 ```typescript
-@Injectable()
-export class MonitoringService {
+@Controller('health')
+export class HealthController {
   constructor(private readonly temporal: TemporalService) {}
 
-  async getSystemHealth() {
-    // Comprehensive health status
+  @Get('temporal')
+  async getTemporalHealth() {
     const health = await this.temporal.getOverallHealth();
     return {
-      status: health.status, // 'healthy' | 'degraded' | 'unhealthy'
+      status: health.status,
       components: health.components,
+      timestamp: new Date().toISOString()
     };
   }
 
-  async getDiscoveryInfo() {
-    // What was discovered
-    const schedules = this.temporal.getManagedSchedules();
+  @Get('temporal/detailed')
+  async getDetailedStatus() {
+    const systemStatus = await this.temporal.getSystemStatus();
     const stats = this.temporal.getDiscoveryStats();
     
-    return { schedules, stats };
-  }
-
-  async manageSchedules() {
-    // Schedule management
-    await this.temporal.pauseSchedule('daily-report', 'Maintenance');
-    await this.temporal.resumeSchedule('daily-report');
-    await this.temporal.triggerSchedule('daily-report'); // Run now
+    return {
+      system: systemStatus,
+      discovery: stats,
+      schedules: this.temporal.getScheduleStats()
+    };
   }
 }
 ```
 
-## 🌟 Why This Package?
+## 🔧 Advanced Features
 
-- **🎯 NestJS First** - Built specifically for NestJS with familiar patterns
-- **🔄 Auto-Discovery** - No manual registration, just use decorators
-- **📅 Built-in Scheduling** - Cron jobs that integrate with workflows
-- **🔧 Production Ready** - Health checks, monitoring, graceful shutdowns
-- **📚 Easy to Learn** - Familiar NestJS service patterns
-- **🚀 Scalable** - Client-only, worker-only, or unified deployments
+### Activity Options
+
+```typescript
+@Activity()
+@Injectable()
+export class PaymentActivities {
+  
+  @ActivityMethod({
+    name: 'processPayment',
+    timeout: '2m',
+    maxRetries: 5,
+    retryPolicy: {
+      maximumAttempts: 5,
+      initialInterval: '1s',
+      maximumInterval: '60s',
+      backoffCoefficient: 2.0
+    }
+  })
+  async processPayment(orderId: string, amount: number) {
+    // Complex payment processing with retries
+  }
+}
+```
+
+### Schedule Management
+
+```typescript
+@Injectable()
+export class ScheduleManagementService {
+  constructor(private readonly temporal: TemporalService) {}
+
+  async pauseSchedule(scheduleId: string) {
+    await this.temporal.pauseSchedule(scheduleId, 'Maintenance mode');
+  }
+
+  async resumeSchedule(scheduleId: string) {
+    await this.temporal.resumeSchedule(scheduleId);
+  }
+
+  async triggerScheduleNow(scheduleId: string) {
+    await this.temporal.triggerSchedule(scheduleId);
+  }
+
+  async getScheduleInfo(scheduleId: string) {
+    return this.temporal.getScheduleInfo(scheduleId);
+  }
+}
+```
+
+### Workflow Signals and Queries
+
+```typescript
+// In your workflow
+import { defineSignal, defineQuery, setHandler } from '@temporalio/workflow';
+
+export const cancelSignal = defineSignal('cancel');
+export const getStatusQuery = defineQuery<string>('getStatus');
+
+export async function orderWorkflow(orderData: any) {
+  let status = 'processing';
+  let cancelled = false;
+
+  // Handle cancel signal
+  setHandler(cancelSignal, () => {
+    cancelled = true;
+    status = 'cancelled';
+  });
+
+  // Handle status query
+  setHandler(getStatusQuery, () => status);
+
+  // Workflow logic with cancellation support
+  if (cancelled) return;
+  
+  // Process order...
+  status = 'completed';
+}
+```
+
+## 🌐 Temporal Cloud Integration
+
+For Temporal Cloud deployments:
+
+```typescript
+TemporalModule.register({
+  connection: {
+    address: 'your-namespace.account.tmprl.cloud:7233',
+    namespace: 'your-namespace.account',
+    tls: true,
+    apiKey: process.env.TEMPORAL_API_KEY,
+    metadata: {
+      'temporal-namespace': 'your-namespace.account'
+    }
+  },
+  taskQueue: 'production-queue',
+  worker: {
+    workflowBundle: require('../workflows/bundle'),
+    workerOptions: WORKER_PRESETS.PRODUCTION_BALANCED
+  }
+})
+```
+
+## 📋 Best Practices
+
+### 1. **Activity Design**
+- Keep activities idempotent
+- Use proper timeouts and retry policies
+- Handle errors gracefully
+- Use dependency injection for testability
+
+### 2. **Workflow Organization**
+- Separate workflow files from activities
+- Use TypeScript for type safety
+- Keep workflows deterministic
+- Bundle workflows for production
+
+### 3. **Configuration Management**
+- Use environment variables for connection settings
+- Separate configs for different environments
+- Use async configuration for dynamic settings
+- Validate configuration at startup
+
+### 4. **Monitoring & Observability**
+- Implement health checks
+- Monitor worker status
+- Track schedule execution
+- Use structured logging
+
+### 5. **Production Deployment**
+- Use pre-bundled workflows
+- Configure appropriate worker limits
+- Enable TLS for security
+- Implement graceful shutdowns
+
+## 📚 API Reference
+
+### Decorators
+
+- `@Activity()` - Mark a class as containing activities
+- `@ActivityMethod(options?)` - Define an activity method
+- `@Scheduled(options)` - Schedule a workflow with full options
+- `@Cron(expression, options?)` - Schedule using cron expression
+- `@Interval(interval, options?)` - Schedule using interval
+
+### Services
+
+- `TemporalService` - Main service for all operations
+- `TemporalClientService` - Client-only operations
+- `TemporalActivityService` - Activity management
+- `TemporalSchedulesService` - Schedule management
+- `TemporalWorkerManagerService` - Worker lifecycle
+
+### Constants
+
+- `CRON_EXPRESSIONS` - Common cron patterns
+- `INTERVAL_EXPRESSIONS` - Common interval patterns
+- `WORKER_PRESETS` - Environment-specific worker configs
+- `RETRY_POLICIES` - Common retry patterns
+- `TIMEOUTS` - Common timeout values
 
 ## 🤝 Contributing
 
-Contributions welcome! Please read our [Contributing Guide](./CONTRIBUTING.md) for details.
+Contributions are welcome! Please read our [Contributing Guide](CONTRIBUTING.md) for details on our code of conduct and the process for submitting pull requests.
 
 ## 📄 License
 
-MIT License - see [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🙏 Acknowledgments
+
+- [Temporal.io](https://temporal.io/) for the amazing workflow engine
+- [NestJS](https://nestjs.com/) for the fantastic framework
+- The TypeScript community for excellent tooling
+
+---
+
+Built with ❤️ for the NestJS and Temporal communities

@@ -255,3 +255,62 @@ export interface WorkflowParameterMetadata {
     index?: number;
     extractAll?: boolean;
 }
+
+// ==========================================
+// Activity Module Interfaces
+// ==========================================
+
+export interface ActivityModuleOptions {
+    /** Specific activity classes to register (optional - will auto-discover if not provided) */
+    activityClasses?: Array<Type<any>>;
+    /** Timeout for activities */
+    timeout?: string | number;
+    /** Global module registration */
+    global?: boolean;
+}
+
+export interface ActivityInfo {
+    className: string;
+    instance: any;
+    targetClass: any;
+    methods: Array<{
+        name: string;
+        methodName: string;
+        options: any;
+    }>;
+    totalMethods: number;
+}
+
+// ==========================================
+// Schedules Module Interfaces
+// ==========================================
+
+export interface SchedulesModuleOptions {
+    /** Auto-start schedules on module initialization */
+    autoStart?: boolean;
+    /** Default timezone for schedules */
+    defaultTimezone?: string;
+    /** Global module registration */
+    global?: boolean;
+}
+
+export interface ScheduleInfo {
+    scheduleId: string;
+    workflowName: string;
+    cronExpression?: string;
+    intervalExpression?: string;
+    description?: string;
+    timezone: string;
+    overlapPolicy: string;
+    isActive: boolean;
+    autoStart: boolean;
+    taskQueue?: string;
+    handler: any;
+    controllerInfo: any;
+    createdAt: Date;
+    lastTriggered?: Date;
+    lastModified?: Date;
+    nextRun?: Date;
+    triggerCount?: number;
+    lastError?: string;
+}

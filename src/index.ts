@@ -24,6 +24,16 @@ export {
 } from './worker';
 
 // ==========================================
+// Activity Components
+// ==========================================
+export { TemporalActivityModule, TemporalActivityService } from './activity';
+
+// ==========================================
+// Schedule Components
+// ==========================================
+export { TemporalSchedulesModule, TemporalSchedulesService } from './schedules';
+
+// ==========================================
 // Discovery Services
 // ==========================================
 export { TemporalDiscoveryService, TemporalScheduleManagerService } from './discovery';

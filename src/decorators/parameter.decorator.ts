@@ -62,8 +62,8 @@ export const WorkflowParam = createParamDecorator(
  *     @WorkflowParam() orderId: string,
  *     @WorkflowContext() context: WorkflowExecutionContext
  *   ) {
- *     console.log('Workflow ID:', context.workflowId);
- *     console.log('Task Queue:', context.taskQueue);
+ *     this.logger.log(`Workflow ID: ${context.workflowId}`);
+ *     this.logger.log(`Task Queue: ${context.taskQueue}`);
  *   }
  *
  *   @Query()
@@ -101,7 +101,7 @@ export const WorkflowContext = (): ParameterDecorator => {
  *     @WorkflowParam() orderId: string,
  *     @WorkflowId() workflowId: string
  *   ) {
- *     console.log('Processing order:', orderId, 'in workflow:', workflowId);
+ *     this.logger.log(`Processing order: ${orderId} in workflow: ${workflowId}`);
  *   }
  * }
  * ```
@@ -131,7 +131,7 @@ export const WorkflowId = (): ParameterDecorator => {
  *     @WorkflowParam() orderId: string,
  *     @RunId() runId: string
  *   ) {
- *     console.log('Processing order:', orderId, 'in run:', runId);
+ *     this.logger.log(`Processing order: ${orderId} in run: ${runId}`);
  *   }
  * }
  * ```
@@ -161,7 +161,7 @@ export const RunId = (): ParameterDecorator => {
  *     @WorkflowParam() orderId: string,
  *     @TaskQueue() taskQueue: string
  *   ) {
- *     console.log('Processing order:', orderId, 'on queue:', taskQueue);
+ *     this.logger.log(`Processing order: ${orderId} on queue: ${taskQueue}`);
  *   }
  * }
  * ```

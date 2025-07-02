@@ -5,6 +5,11 @@ export const TEMPORAL_MODULE_OPTIONS = 'TEMPORAL_MODULE_OPTIONS';
 export const TEMPORAL_CLIENT = 'TEMPORAL_CLIENT';
 export const TEMPORAL_CONNECTION = 'TEMPORAL_CONNECTION';
 
+// Module-specific tokens
+export const ACTIVITY_MODULE_OPTIONS = 'ACTIVITY_MODULE_OPTIONS';
+export const SCHEDULES_MODULE_OPTIONS = 'SCHEDULES_MODULE_OPTIONS';
+export const WORKER_MODULE_OPTIONS = 'WORKER_MODULE_OPTIONS';
+
 // ==========================================
 // Metadata Keys
 // ==========================================
