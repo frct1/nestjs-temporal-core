@@ -101,8 +101,8 @@ export class TemporalWorkerManagerService
             throw new Error(ERRORS.MISSING_TASK_QUEUE);
         }
 
-        const hasWorkflowsPath = Boolean(this.options.worker?.workflowsPath);
-        const hasWorkflowBundle = Boolean(this.options.worker?.workflowBundle);
+        const hasWorkflowsPath = Boolean(this.options?.workflowsPath);
+        const hasWorkflowBundle = Boolean(this.options?.workflowBundle);
 
         if (!hasWorkflowsPath && !hasWorkflowBundle) {
             throw new Error('Either workflowsPath or workflowBundle must be provided');
@@ -149,7 +149,6 @@ export class TemporalWorkerManagerService
         }
 
         const workerOptions = this.buildWorkerOptions();
-
         this.worker = await Worker.create({
             connection: this.connection,
             namespace: this.options.connection?.namespace || DEFAULT_NAMESPACE,
@@ -171,12 +170,11 @@ export class TemporalWorkerManagerService
             taskQueue: this.options.taskQueue,
             activities: this.activities,
         };
-
         // Add workflow configuration
-        if (this.options.worker?.workflowBundle) {
-            baseOptions.workflowBundle = this.options.worker.workflowBundle;
-        } else if (this.options.worker?.workflowsPath) {
-            baseOptions.workflowsPath = this.options.worker.workflowsPath;
+        if (this.options?.workflowBundle) {
+            baseOptions.workflowBundle = this.options.workflowBundle;
+        } else if (this.options?.workflowsPath) {
+            baseOptions.workflowsPath = this.options.workflowsPath;
         }
 
         // Apply environment-specific defaults
@@ -335,7 +333,7 @@ export class TemporalWorkerManagerService
             this.lastError = undefined;
 
             // Start the worker (this will block until shutdown)
-            await this.worker.run();
+            this.worker.run();
         } catch (error) {
             this.isRunning = false;
             this.lastError = error.message;
